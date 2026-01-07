@@ -1,0 +1,120 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Build Binaries
+        shell: pwsh
+        run: |
+          # Build for Windows AMD64
+          $env:GOOS = "windows"
+          $env:GOARCH = "amd64"
+          go build -ldflags="-s -w" -o bin/analyze-windows-amd64.exe ./cmd/analyze
+          go build -ldflags="-s -w" -o bin/status-windows-amd64.exe ./cmd/status
+          
+          # Build for Windows ARM64
+          $env:GOARCH = "arm64"
+          go build -ldflags="-s -w" -o bin/analyze-windows-arm64.exe ./cmd/analyze
+          go build -ldflags="-s -w" -o bin/status-windows-arm64.exe ./cmd/status
+          
+          Write-Host "Built binaries:"
+          Get-ChildItem bin/*.exe | ForEach-Object { Write-Host "  $($_.Name) - $([math]::Round($_.Length/1MB, 2)) MB" }
+
+      - name: Run Tests
+        shell: pwsh
+        run: |
+          Install-Module -Name Pester -Force -SkipPublisherCheck -MinimumVersion 5.0
+          Import-Module Pester -MinimumVersion 5.0
+          
+          $config = New-PesterConfiguration
+          $config.Run.Path = "./tests"
+          $config.Run.Exit = $true
+          $config.Filter.ExcludeTag = @("Integration")
+          
+          Invoke-Pester -Configuration $config
+
+      - name: Create Release Archive
+        shell: pwsh
+        run: |
+          # Create release directory
+          New-Item -ItemType Directory -Path release -Force
+          
+          # Copy PowerShell scripts
+          Copy-Item -Path winmole.ps1 -Destination release/
+          Copy-Item -Path install.ps1 -Destination release/
+          Copy-Item -Path bin/*.ps1 -Destination release/bin/ -Force
+          Copy-Item -Path lib -Destination release/ -Recurse
+          Copy-Item -Path README.md -Destination release/
+          Copy-Item -Path LICENSE -Destination release/
+          Copy-Item -Path CONTRIBUTING.md -Destination release/
+          
+          # Copy AMD64 binaries
+          Copy-Item -Path bin/analyze-windows-amd64.exe -Destination release/bin/analyze.exe
+          Copy-Item -Path bin/status-windows-amd64.exe -Destination release/bin/status.exe
+          
+          # Create ZIP archive
+          Compress-Archive -Path release/* -DestinationPath winmole-windows-amd64.zip
+          
+          # Create ARM64 version
+          Copy-Item -Path bin/analyze-windows-arm64.exe -Destination release/bin/analyze.exe -Force
+          Copy-Item -Path bin/status-windows-arm64.exe -Destination release/bin/status.exe -Force
+          Compress-Archive -Path release/* -DestinationPath winmole-windows-arm64.zip
+          
+          Write-Host "Created release archives:"
+          Get-ChildItem *.zip | ForEach-Object { Write-Host "  $($_.Name) - $([math]::Round($_.Length/1MB, 2)) MB" }
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-binaries
+          path: |
+            winmole-windows-amd64.zip
+            winmole-windows-arm64.zip
+            bin/*-windows-*.exe
+          retention-days: 5
+
+  release:
+    name: Publish Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-binaries
+          path: artifacts
+
+      - name: Display structure
+        run: ls -R artifacts/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            artifacts/winmole-windows-amd64.zip
+            artifacts/winmole-windows-arm64.zip
+            artifacts/bin/*-windows-*.exe
+          generate_release_notes: true
+          draft: false
+          prerelease: false

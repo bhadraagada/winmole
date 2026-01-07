@@ -1,0 +1,70 @@
+name: Check
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  syntax:
+    name: PowerShell Syntax Check
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate PowerShell Scripts
+        shell: pwsh
+        run: |
+          $errors = @()
+          Get-ChildItem -Path . -Filter *.ps1 -Recurse | ForEach-Object {
+              $parseErrors = $null
+              $null = [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$parseErrors)
+              if ($parseErrors) {
+                  $errors += "Errors in $($_.Name): $parseErrors"
+              }
+          }
+          if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error $_ }
+              exit 1
+          }
+          Write-Host "All PowerShell scripts are syntactically valid" -ForegroundColor Green
+
+  go-check:
+    name: Go Build Check
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Check Go formatting
+        run: |
+          $files = gofmt -l ./cmd/...
+          if ($files) {
+              Write-Host "The following files need formatting:"
+              $files
+              exit 1
+          }
+          Write-Host "All Go files are properly formatted" -ForegroundColor Green
+        shell: pwsh
+
+      - name: Run go vet
+        run: go vet ./cmd/...
+
+      - name: Build binaries
+        run: |
+          go build -o bin/analyze.exe ./cmd/analyze
+          go build -o bin/status.exe ./cmd/status
+          Write-Host "Go binaries built successfully" -ForegroundColor Green
+        shell: pwsh
