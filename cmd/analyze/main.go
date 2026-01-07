@@ -291,7 +291,7 @@ func (m model) View() string {
 
 		for i := m.offset; i < endIdx; i++ {
 			entry := m.entries[i]
-			
+
 			// Size bar
 			var barWidth int
 			if m.totalSize > 0 {
