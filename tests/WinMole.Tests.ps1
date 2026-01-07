@@ -144,7 +144,9 @@ Describe "File Operations - file_ops.ps1" {
         
         It "skips protected paths" {
             # This should not actually try to delete Windows directory
-            { Remove-SafeItem -Path "C:\Windows" -WhatIf } | Should -Not -Throw
+            # Remove-SafeItem internally checks and returns $false for protected paths
+            $result = Remove-SafeItem -Path "C:\Windows"
+            $result | Should -Be $false
         }
         
         It "handles non-existent paths gracefully" {
@@ -201,18 +203,19 @@ Describe "Script Validation" {
     
     Context "PowerShell Scripts Syntax" {
         
-        $scripts = Get-ChildItem -Path $script:ROOT -Include "*.ps1" -Recurse
+        BeforeDiscovery {
+            $rootDir = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
+            $script:AllScripts = Get-ChildItem -Path $rootDir -Include "*.ps1" -Recurse
+        }
         
-        foreach ($scriptFile in $scripts) {
-            It "validates: $($scriptFile.Name)" {
-                $parseErrors = $null
-                $null = [System.Management.Automation.Language.Parser]::ParseFile(
-                    $scriptFile.FullName,
-                    [ref]$null,
-                    [ref]$parseErrors
-                )
-                $parseErrors.Count | Should -Be 0
-            }
+        It "validates: <_.Name>" -ForEach $AllScripts {
+            $parseErrors = $null
+            $null = [System.Management.Automation.Language.Parser]::ParseFile(
+                $_.FullName,
+                [ref]$null,
+                [ref]$parseErrors
+            )
+            $parseErrors.Count | Should -Be 0
         }
     }
 }
@@ -229,12 +232,12 @@ Describe "Commands" {
         }
         
         It "shows version with -Version flag" {
-            $output = & (Join-Path $script:ROOT "winmole.ps1") -Version 2>&1
+            $output = & (Join-Path $script:ROOT "winmole.ps1") -Version 6>&1 | Out-String
             $output | Should -Match "WinMole"
         }
         
-        It "shows help with -Help flag" {
-            $output = & (Join-Path $script:ROOT "winmole.ps1") -Help 2>&1
+        It "shows help with -ShowHelp flag" {
+            $output = & (Join-Path $script:ROOT "winmole.ps1") -ShowHelp 6>&1 | Out-String
             $output | Should -Match "COMMANDS"
         }
     }
@@ -245,8 +248,8 @@ Describe "Commands" {
         }
         
         It "shows help with -Help flag" {
-            $output = & (Join-Path $script:BIN_DIR "clean.ps1") -Help 2>&1
-            $output | Should -Match "CLEAN|USAGE"
+            $output = & (Join-Path $script:BIN_DIR "clean.ps1") -Help 6>&1 | Out-String
+            $output | Should -Match "USAGE"
         }
     }
     

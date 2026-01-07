@@ -116,7 +116,7 @@ function Write-DryRun {
 # Section Functions (for progress indication)
 # ============================================================================
 
-$script:CurrentSection = @{
+$global:WinMoleCurrentSection = @{
     Active   = $false
     Activity = $false
     Name     = ""
@@ -129,9 +129,9 @@ function Start-Section {
     #>
     param([string]$Title)
     
-    $script:CurrentSection.Active = $true
-    $script:CurrentSection.Activity = $false
-    $script:CurrentSection.Name = $Title
+    $global:WinMoleCurrentSection.Active = $true
+    $global:WinMoleCurrentSection.Activity = $false
+    $global:WinMoleCurrentSection.Name = $Title
     
     $purple = $script:Colors.PurpleBold
     $nc = $script:Colors.NC
@@ -146,10 +146,10 @@ function Stop-Section {
     .SYNOPSIS
         End the current section
     #>
-    if ($script:CurrentSection.Active -and -not $script:CurrentSection.Activity) {
+    if ($global:WinMoleCurrentSection.Active -and -not $global:WinMoleCurrentSection.Activity) {
         Write-Success "Nothing to tidy"
     }
-    $script:CurrentSection.Active = $false
+    $global:WinMoleCurrentSection.Active = $false
 }
 
 function Set-SectionActivity {
@@ -157,8 +157,8 @@ function Set-SectionActivity {
     .SYNOPSIS
         Mark that activity occurred in current section
     #>
-    if ($script:CurrentSection.Active) {
-        $script:CurrentSection.Activity = $true
+    if ($global:WinMoleCurrentSection.Active) {
+        $global:WinMoleCurrentSection.Activity = $true
     }
 }
 
