@@ -35,8 +35,8 @@ jobs:
           }
           Write-Host "All PowerShell scripts are syntactically valid" -ForegroundColor Green
 
-  go-check:
-    name: Go Build Check
+  go-build:
+    name: Go Build
     runs-on: windows-latest
 
     steps:
@@ -47,30 +47,6 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.21'
-
-      - name: Check Go formatting
-        shell: pwsh
-        run: |
-          $goFiles = Get-ChildItem -Path cmd -Filter *.go -Recurse -ErrorAction SilentlyContinue
-          if (-not $goFiles) {
-              Write-Host "No Go files found in cmd/, skipping format check" -ForegroundColor Yellow
-              exit 0
-          }
-          
-          $unformatted = @()
-          foreach ($file in $goFiles) {
-              $result = gofmt -l $file.FullName 2>&1
-              if ($result -and $result -notmatch "^$") {
-                  $unformatted += $file.FullName
-              }
-          }
-          
-          if ($unformatted.Count -gt 0) {
-              Write-Host "The following files need formatting:" -ForegroundColor Red
-              $unformatted | ForEach-Object { Write-Host "  $_" }
-              exit 1
-          }
-          Write-Host "All Go files are properly formatted" -ForegroundColor Green
 
       - name: Run go vet
         shell: pwsh

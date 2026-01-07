@@ -1,0 +1,27 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# Go files must use LF line endings
+*.go text eol=lf
+
+# PowerShell files can use CRLF on Windows
+*.ps1 text eol=crlf
+*.psm1 text eol=crlf
+*.psd1 text eol=crlf
+
+# Shell scripts use LF
+*.sh text eol=lf
+
+# Markdown and config files
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+
+# Batch files use CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary files
+*.exe binary
+*.dll binary
