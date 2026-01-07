@@ -57,32 +57,32 @@ var (
 // Metrics holds all system metrics
 type Metrics struct {
 	// CPU
-	CPUUsage    float64
-	CPUCores    int
-	CPUModel    string
-	
+	CPUUsage float64
+	CPUCores int
+	CPUModel string
+
 	// Memory
-	MemTotal    uint64
-	MemUsed     uint64
-	MemPercent  float64
-	
+	MemTotal   uint64
+	MemUsed    uint64
+	MemPercent float64
+
 	// Disk
 	DiskTotal   uint64
 	DiskUsed    uint64
 	DiskPercent float64
 	DiskPath    string
-	
+
 	// Network
 	NetSent     uint64
 	NetRecv     uint64
 	NetSentRate float64
 	NetRecvRate float64
-	
+
 	// System
-	Hostname    string
-	OS          string
-	Uptime      time.Duration
-	
+	Hostname string
+	OS       string
+	Uptime   time.Duration
+
 	// Timestamp
 	CollectedAt time.Time
 }
@@ -188,7 +188,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case metricsMsg:
 		m.prevMetrics = m.metrics
 		m.metrics = Metrics(msg)
-		
+
 		// Calculate network rates
 		if !m.prevMetrics.CollectedAt.IsZero() {
 			elapsed := m.metrics.CollectedAt.Sub(m.prevMetrics.CollectedAt).Seconds()
@@ -197,7 +197,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.metrics.NetRecvRate = float64(m.metrics.NetRecv-m.prevMetrics.NetRecv) / elapsed
 			}
 		}
-		
+
 		m.ready = true
 		return m, nil
 
@@ -238,7 +238,7 @@ func (m model) View() string {
 	// Layout cards
 	row1 := lipgloss.JoinHorizontal(lipgloss.Top, cpuCard, memCard)
 	row2 := lipgloss.JoinHorizontal(lipgloss.Top, diskCard, netCard)
-	
+
 	b.WriteString(row1)
 	b.WriteString("\n")
 	b.WriteString(row2)

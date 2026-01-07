@@ -1,0 +1,73 @@
+name: Check
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  syntax:
+    name: PowerShell Syntax Check
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate PowerShell Scripts
+        shell: pwsh
+        run: |
+          $errors = @()
+          Get-ChildItem -Path . -Filter *.ps1 -Recurse | ForEach-Object {
+              $parseErrors = $null
+              $null = [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$parseErrors)
+              if ($parseErrors) {
+                  $errors += "Errors in $($_.Name): $parseErrors"
+              }
+          }
+          if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error $_ }
+              exit 1
+          }
+          Write-Host "All PowerShell scripts are syntactically valid" -ForegroundColor Green
+
+  go-build:
+    name: Go Build
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Run go vet
+        shell: pwsh
+        run: |
+          if (Test-Path cmd) {
+              go vet ./cmd/...
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+              Write-Host "go vet passed" -ForegroundColor Green
+          } else {
+              Write-Host "cmd/ directory not found, skipping go vet" -ForegroundColor Yellow
+          }
+
+      - name: Build binaries
+        shell: pwsh
+        run: |
+          if (Test-Path cmd/analyze) {
+              go build -o bin/analyze.exe ./cmd/analyze
+              Write-Host "Built analyze.exe" -ForegroundColor Green
+          }
+          if (Test-Path cmd/status) {
+              go build -o bin/status.exe ./cmd/status
+              Write-Host "Built status.exe" -ForegroundColor Green
+          }
+          Write-Host "Go binaries built successfully" -ForegroundColor Green

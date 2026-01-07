@@ -1,0 +1,94 @@
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# Editor files
+*~
+*.swp
+*.swo
+.idea/
+.vscode/*.code-workspace
+.vscode/settings.json
+*.sublime-workspace
+*.sublime-project
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+tests/tmp-*
+
+# Cache
+.cache/
+*.cache
+.gocache/
+.gomod/
+
+# Backup files
+*.bak
+*.backup
+
+# System files
+*.pid
+*.lock
+
+# AI Assistant Instructions
+.claude/
+.gemini/
+.kiro/
+CLAUDE.md
+GEMINI.md
+.cursorrules
+
+# Go build artifacts (development)
+cmd/analyze/analyze
+cmd/analyze/analyze.exe
+cmd/status/status
+cmd/status/status.exe
+/status
+/analyze
+/status.exe
+/analyze.exe
+
+# Go binaries (keep the ones in bin/)
+# bin/analyze.exe - keep for distribution
+# bin/status.exe - keep for distribution
+
+# Test artifacts
+tests/tmp-*/
+tests/*.tmp
+tests/*.log
+
+# PowerShell artifacts
+*.ps1xml
+
+# Build outputs
+build/
+dist/
+out/
+
+# Node.js (if any frontend)
+node_modules/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# HTML demo files
+index.html
