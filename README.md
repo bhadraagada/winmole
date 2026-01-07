@@ -5,9 +5,9 @@
 A comprehensive system maintenance toolkit for Windows, ported from the macOS [Mole](https://github.com/anomalyco/mole) project.
 
 ```
-╦ ╦╦╔╗╔╔╦╗╔═╗╦  ╔═╗
-║║║║║║║║║║║ ║║  ║╣ 
-╚╩╝╩╝╚╝╩ ╩╚═╝╩═╝╚═╝
+╦ ╦ ╦ ╔╗╔ ╔╦╗ ╔═╗ ╦   ╔═╗
+║║║ ║ ║║║ ║║║ ║ ║ ║   ║╣ 
+╚╩╝ ╩ ╝╚╝ ╩ ╩ ╚═╝ ╩═╝ ╚═╝
 Windows System Maintenance
 ```
 
