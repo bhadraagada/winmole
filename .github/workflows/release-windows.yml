@@ -1,0 +1,143 @@
+name: Build Windows Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Trigger on version tags (e.g., v1.0.0)
+      - 'V*.*.*'  # Also support uppercase V (e.g., V1.0.0)
+      - 'v*.*.*-windows'  # Windows-specific releases
+      - 'V*.*.*-windows'  # Windows-specific releases (uppercase)
+  workflow_dispatch:  # Allow manual trigger
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write  # Required for creating releases
+
+jobs:
+  build-windows:
+    name: Build Windows Release Artifacts
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.6'
+      
+      - name: Setup PowerShell
+        shell: pwsh
+        run: |
+          Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)"
+          Write-Host "Go Version: $(go version)"
+      
+      - name: Extract version
+        id: version
+        shell: pwsh
+        run: |
+          if ("${{ github.event.inputs.version }}" -ne "") {
+            $version = "${{ github.event.inputs.version }}"
+          } elseif ("${{ github.ref }}" -like "refs/tags/*") {
+            $version = "${{ github.ref }}" -replace '^refs/tags/[Vv]', ''
+          } else {
+            $content = Get-Content winmole.ps1 -Raw
+            if ($content -match '\$script:WINMOLE_VER\s*=\s*"([^"]+)"') {
+              $version = $Matches[1]
+            } else {
+              Write-Error "Could not detect version"
+              exit 1
+            }
+          }
+          Write-Host "Version: $version"
+          "VERSION=$version" >> $env:GITHUB_OUTPUT
+      
+      - name: Run tests
+        shell: pwsh
+        run: |
+          if (Test-Path "scripts\test.ps1") {
+            & scripts\test.ps1
+          } else {
+            Write-Host "No test script found, skipping tests"
+          }
+      
+      - name: Install PS2EXE
+        shell: pwsh
+        run: |
+          Write-Host "Installing PS2EXE module..."
+          Install-Module -Name ps2exe -Force -Scope CurrentUser -SkipPublisherCheck
+      
+      - name: Build release artifacts (ZIP)
+        shell: pwsh
+        run: |
+          & scripts\build-release.ps1 -Version ${{ steps.version.outputs.VERSION }}
+      
+      - name: Build standalone EXE
+        shell: pwsh
+        run: |
+          & scripts\build-exe.ps1 -Version ${{ steps.version.outputs.VERSION }}
+        continue-on-error: true
+      
+      - name: List release artifacts
+        shell: pwsh
+        run: |
+          Write-Host "Release artifacts:"
+          Get-ChildItem release\ | ForEach-Object {
+            $size = if ($_.PSIsContainer) { "-" } else { "$([math]::Round($_.Length / 1MB, 2)) MB" }
+            Write-Host "  $($_.Name) - $size"
+          }
+      
+      - name: Upload ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: winmole-${{ steps.version.outputs.VERSION }}-x64-zip
+          path: release/winmole-${{ steps.version.outputs.VERSION }}-x64.zip
+          if-no-files-found: error
+      
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: winmole-${{ steps.version.outputs.VERSION }}-x64-exe
+          path: release/winmole-${{ steps.version.outputs.VERSION }}-x64.exe
+          if-no-files-found: ignore
+      
+      - name: Upload checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: checksums
+          path: release/SHA256SUMS.txt
+          if-no-files-found: error
+      
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            release/winmole-${{ steps.version.outputs.VERSION }}-x64.zip
+            release/winmole-${{ steps.version.outputs.VERSION }}-x64.exe
+            release/SHA256SUMS.txt
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            ## Windows System Maintenance Toolkit
+            
+            **Download:** `winmole-${{ steps.version.outputs.VERSION }}-x64.zip` (portable) or `.exe` (launcher)
+            
+            **Install:**
+            ```powershell
+            Expand-Archive winmole-${{ steps.version.outputs.VERSION }}-x64.zip -DestinationPath C:\winmole
+            cd C:\winmole
+            .\install.ps1
+            ```
+            
+            **Verify:** Check SHA256SUMS.txt for file integrity.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

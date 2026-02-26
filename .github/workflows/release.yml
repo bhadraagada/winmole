@@ -3,16 +3,15 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - 'W*'  # Windows releases use W prefix (e.g., W1.0.0)
 
 permissions:
   contents: write
 
 jobs:
   build:
-    name: Build
+    name: Build Windows
     runs-on: windows-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -20,101 +19,88 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version: "1.24.6"
 
       - name: Build Binaries
-        shell: pwsh
         run: |
-          # Build for Windows AMD64
-          $env:GOOS = "windows"
-          $env:GOARCH = "amd64"
-          go build -ldflags="-s -w" -o bin/analyze-windows-amd64.exe ./cmd/analyze
-          go build -ldflags="-s -w" -o bin/status-windows-amd64.exe ./cmd/status
-          
-          # Build for Windows ARM64
-          $env:GOARCH = "arm64"
-          go build -ldflags="-s -w" -o bin/analyze-windows-arm64.exe ./cmd/analyze
-          go build -ldflags="-s -w" -o bin/status-windows-arm64.exe ./cmd/status
-          
-          Write-Host "Built binaries:"
-          Get-ChildItem bin/*.exe | ForEach-Object { Write-Host "  $($_.Name) - $([math]::Round($_.Length/1MB, 2)) MB" }
-
-      - name: Run Tests
+          cd cmd/analyze
+          go build -ldflags="-s -w" -o analyze.exe .
+          cd ../status
+          go build -ldflags="-s -w" -o status.exe .
         shell: pwsh
-        run: |
-          Install-Module -Name Pester -Force -SkipPublisherCheck -MinimumVersion 5.0
-          Import-Module Pester -MinimumVersion 5.0
-          
-          $config = New-PesterConfiguration
-          $config.Run.Path = "./tests"
-          $config.Run.Exit = $true
-          $config.Filter.ExcludeTag = @("Integration")
-          
-          Invoke-Pester -Configuration $config
 
-      - name: Create Release Archive
-        shell: pwsh
+      - name: Create release package
         run: |
           # Create release directory
-          New-Item -ItemType Directory -Path release -Force
+          New-Item -ItemType Directory -Force -Path release
+          
+          # Copy binaries
+          Copy-Item cmd/analyze/analyze.exe release/
+          Copy-Item cmd/status/status.exe release/
           
           # Copy PowerShell scripts
-          Copy-Item -Path winmole.ps1 -Destination release/
-          Copy-Item -Path install.ps1 -Destination release/
-          Copy-Item -Path bin/*.ps1 -Destination release/bin/ -Force
-          Copy-Item -Path lib -Destination release/ -Recurse
-          Copy-Item -Path README.md -Destination release/
-          Copy-Item -Path LICENSE -Destination release/
-          Copy-Item -Path CONTRIBUTING.md -Destination release/
+          Copy-Item winmole.ps1 release/
+          Copy-Item install.ps1 release/
+          Copy-Item -Recurse bin release/
+          Copy-Item -Recurse lib release/
           
-          # Copy AMD64 binaries
-          Copy-Item -Path bin/analyze-windows-amd64.exe -Destination release/bin/analyze.exe
-          Copy-Item -Path bin/status-windows-amd64.exe -Destination release/bin/status.exe
+          # Copy docs
+          Copy-Item README.md release/
+          Copy-Item LICENSE release/
           
-          # Create ZIP archive
-          Compress-Archive -Path release/* -DestinationPath winmole-windows-amd64.zip
-          
-          # Create ARM64 version
-          Copy-Item -Path bin/analyze-windows-arm64.exe -Destination release/bin/analyze.exe -Force
-          Copy-Item -Path bin/status-windows-arm64.exe -Destination release/bin/status.exe -Force
-          Compress-Archive -Path release/* -DestinationPath winmole-windows-arm64.zip
-          
-          Write-Host "Created release archives:"
-          Get-ChildItem *.zip | ForEach-Object { Write-Host "  $($_.Name) - $([math]::Round($_.Length/1MB, 2)) MB" }
+          # Create zip
+          Compress-Archive -Path release/* -DestinationPath winmole-windows.zip
+        shell: pwsh
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: release-binaries
-          path: |
-            winmole-windows-amd64.zip
-            winmole-windows-arm64.zip
-            bin/*-windows-*.exe
+          name: windows-release
+          path: winmole-windows.zip
           retention-days: 5
 
   release:
     name: Publish Release
     needs: build
     runs-on: ubuntu-latest
-
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          name: release-binaries
-          path: artifacts
+          name: windows-release
 
-      - name: Display structure
-        run: ls -R artifacts/
+      - name: Display downloaded files
+        run: ls -la
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: |
-            artifacts/winmole-windows-amd64.zip
-            artifacts/winmole-windows-arm64.zip
-            artifacts/bin/*-windows-*.exe
+          files: winmole-windows.zip
           generate_release_notes: true
           draft: false
           prerelease: false
+          name: "WinMole for Windows ${{ github.ref_name }}"
+          body: |
+            ## WinMole for Windows
+            
+            Windows port of the WinMole system maintenance toolkit.
+            
+            ### Installation
+            
+            **Quick install:**
+            ```powershell
+            irm https://raw.githubusercontent.com/bhadraagada/winmole/master/install.ps1 | iex
+            ```
+            
+            **Manual install:**
+            1. Download and extract `winmole-windows.zip`
+            2. Run `install.ps1`
+            
+            ### Features
+            - Deep system cleanup (temp files, caches, logs)
+            - Smart app uninstaller with leftover detection
+            - Disk space analyzer (TUI)
+            - System status monitor (TUI)
+            - Developer artifact cleanup
+            - System optimization

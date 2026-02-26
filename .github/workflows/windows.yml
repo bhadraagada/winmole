@@ -1,0 +1,194 @@
+name: Windows CI
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '**'
+      - '.github/workflows/windows.yml'
+  pull_request:
+    branches: [master]
+    paths:
+      - '**'
+      - '.github/workflows/windows.yml'
+
+jobs:
+  build:
+    name: Build & Test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache-dependency-path: go.sum
+
+      - name: Build Go binaries
+        run: |
+          go build -o bin/analyze.exe ./cmd/analyze/
+          go build -o bin/status.exe ./cmd/status/
+
+      - name: Run Go tests
+        run: go test -v ./...
+
+      - name: Validate PowerShell syntax
+        shell: pwsh
+        run: |
+          $scripts = Get-ChildItem -Path . -Filter "*.ps1" -Recurse
+          $errors = @()
+          foreach ($script in $scripts) {
+              $parseErrors = $null
+              $null = [System.Management.Automation.Language.Parser]::ParseFile(
+                  $script.FullName,
+                  [ref]$null,
+                  [ref]$parseErrors
+              )
+              if ($parseErrors) {
+                  Write-Host "ERROR: $($script.FullName)" -ForegroundColor Red
+                  foreach ($err in $parseErrors) {
+                      Write-Host "  $($err.Message)" -ForegroundColor Red
+                  }
+                  $errors += $script.FullName
+              } else {
+                  Write-Host "OK: $($script.Name)" -ForegroundColor Green
+              }
+          }
+          if ($errors.Count -gt 0) {
+              Write-Host "`n$($errors.Count) script(s) have syntax errors!" -ForegroundColor Red
+              exit 1
+          }
+
+  pester:
+    name: Pester Tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Pester
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module -Name Pester -MinimumVersion 5.0.0 -Force -SkipPublisherCheck
+
+      - name: Run Pester tests
+        shell: pwsh
+        run: |
+          Import-Module Pester -MinimumVersion 5.0.0
+          
+          $config = New-PesterConfiguration
+          $config.Run.Path = "tests"
+          $config.Run.Exit = $true
+          $config.Output.Verbosity = "Detailed"
+          $config.TestResult.Enabled = $true
+          $config.TestResult.OutputPath = "test-results.xml"
+          $config.TestResult.OutputFormat = "NUnitXml"
+          
+          Invoke-Pester -Configuration $config
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pester-results
+          path: test-results.xml
+
+  compatibility:
+    name: Windows Compatibility
+    strategy:
+      matrix:
+        os: [windows-2022, windows-2019]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test PowerShell 5.1
+        shell: powershell
+        run: |
+          Write-Host "Testing on ${{ matrix.os }} with PowerShell $($PSVersionTable.PSVersion)"
+          
+          # Test main entry point
+          $result = & powershell -ExecutionPolicy Bypass -File "winmole.ps1" -ShowHelp 2>&1
+          if ($LASTEXITCODE -ne 0) {
+              Write-Host "winmole.ps1 -ShowHelp failed" -ForegroundColor Red
+              exit 1
+          }
+          Write-Host "✓ winmole.ps1 works on ${{ matrix.os }}"
+
+      - name: Test command scripts
+        shell: powershell
+        run: |
+          $commands = @("clean", "uninstall", "optimize", "purge", "analyze", "status")
+          foreach ($cmd in $commands) {
+              $scriptPath = "bin\$cmd.ps1"
+              if (Test-Path $scriptPath) {
+                  $result = & powershell -ExecutionPolicy Bypass -File $scriptPath -ShowHelp 2>&1
+                  if ($LASTEXITCODE -ne 0) {
+                      Write-Host "✗ $cmd.ps1 failed" -ForegroundColor Red
+                      exit 1
+                  }
+                  Write-Host "✓ $cmd.ps1 works"
+              }
+          }
+
+  security:
+    name: Security Checks
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for unsafe patterns
+        shell: pwsh
+        run: |
+          Write-Host "Checking for unsafe removal patterns..."
+          
+          $unsafePatterns = @(
+              "Remove-Item.*-Recurse.*-Force.*\\$env:SystemRoot",
+              "Remove-Item.*-Recurse.*-Force.*C:\\Windows",
+              "Remove-Item.*-Recurse.*-Force.*C:\\Program Files"
+          )
+          
+          $files = Get-ChildItem -Path . -Filter "*.ps1" -Recurse
+          $issues = @()
+          
+          foreach ($file in $files) {
+              $content = Get-Content $file.FullName -Raw
+              foreach ($pattern in $unsafePatterns) {
+                  if ($content -match $pattern) {
+                      $issues += "$($file.Name): matches unsafe pattern"
+                  }
+              }
+          }
+          
+          if ($issues.Count -gt 0) {
+              Write-Host "Unsafe patterns found:" -ForegroundColor Red
+              $issues | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+              exit 1
+          }
+          
+          Write-Host "✓ No unsafe patterns found" -ForegroundColor Green
+
+      - name: Verify protection checks
+        shell: pwsh
+        run: |
+          Write-Host "Verifying protection logic..."
+          
+          # Source file_ops to get Test-ProtectedPath
+          . .\lib\core\base.ps1
+          . .\lib\core\file_ops.ps1
+          
+          $protectedPaths = @(
+              "C:\Windows",
+              "C:\Windows\System32",
+              "C:\Program Files",
+              "C:\Program Files (x86)"
+          )
+          
+          foreach ($path in $protectedPaths) {
+              if (-not (Test-ProtectedPath -Path $path)) {
+                  Write-Host "✗ $path should be protected!" -ForegroundColor Red
+                  exit 1
+              }
+              Write-Host "✓ $path is protected" -ForegroundColor Green
+          }

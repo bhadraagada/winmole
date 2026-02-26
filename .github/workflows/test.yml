@@ -1,140 +1,142 @@
-name: Tests
+name: Validation
 
 on:
   push:
-    branches: [main, master]
+    branches: [master]
   pull_request:
-    branches: [main, master]
-
-permissions:
-  contents: read
+    branches: [master]
 
 jobs:
-  pester-tests:
-    name: Pester Tests
+  tests:
+    name: Unit & Integration Tests
     runs-on: windows-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Pester
-        shell: pwsh
-        run: |
-          Install-Module -Name Pester -Force -SkipPublisherCheck -MinimumVersion 5.0
-          Import-Module Pester -MinimumVersion 5.0
-
-      - name: Run Pester Tests
-        shell: pwsh
-        run: |
-          if (-not (Test-Path "./tests")) {
-              Write-Host "No tests directory found, skipping" -ForegroundColor Yellow
-              exit 0
-          }
-          
-          $config = New-PesterConfiguration
-          $config.Run.Path = "./tests"
-          $config.Run.Exit = $true
-          $config.Filter.ExcludeTag = @("Integration")
-          $config.Output.Verbosity = "Detailed"
-          $config.TestResult.Enabled = $true
-          $config.TestResult.OutputPath = "test-results.xml"
-          $config.TestResult.OutputFormat = "NUnitXml"
-          
-          Invoke-Pester -Configuration $config
-
-      - name: Upload Test Results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: test-results
-          path: test-results.xml
-          if-no-files-found: ignore
-
-  go-tests:
-    name: Go Tests
-    runs-on: windows-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version: "1.24.6"
 
-      - name: Run Go Tests
-        shell: pwsh
+      - name: Install Pester
         run: |
-          if (Test-Path cmd) {
-              # Check if there are any test files
-              $testFiles = Get-ChildItem -Path cmd -Filter *_test.go -Recurse -ErrorAction SilentlyContinue
-              if ($testFiles) {
-                  go test -v ./cmd/...
-                  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-              } else {
-                  Write-Host "No Go test files found, skipping" -ForegroundColor Yellow
-              }
+          Install-Module -Name Pester -Force -SkipPublisherCheck -Scope CurrentUser
+        shell: pwsh
+
+      - name: Run PowerShell tests
+        run: |
+          Import-Module Pester
+          $config = New-PesterConfiguration
+          $config.Run.Path = "./tests"
+          $config.Output.Verbosity = "Detailed"
+          $config.Run.Exit = $true
+          Invoke-Pester -Configuration $config
+        shell: pwsh
+
+      - name: Run Go tests
+        run: |
+          cd cmd/analyze
+          go test -v ./...
+          cd ../status
+          go test -v ./...
+        shell: pwsh
+
+  build:
+    name: Build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.6"
+
+      - name: Build Go binaries
+        run: |
+          cd cmd/analyze
+          go build -o analyze.exe .
+          cd ../status
+          go build -o status.exe .
+        shell: pwsh
+
+      - name: Verify binaries
+        run: |
+          if (Test-Path cmd/analyze/analyze.exe) {
+            Write-Host "analyze.exe built successfully"
           } else {
-              Write-Host "cmd/ directory not found, skipping Go tests" -ForegroundColor Yellow
+            Write-Host "Failed to build analyze.exe"
+            exit 1
           }
+          if (Test-Path cmd/status/status.exe) {
+            Write-Host "status.exe built successfully"
+          } else {
+            Write-Host "Failed to build status.exe"
+            exit 1
+          }
+        shell: pwsh
 
   security:
     name: Security Checks
     runs-on: windows-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Check for unsafe Remove-Item usage
-        shell: pwsh
+      - name: Load core modules
         run: |
-          Write-Host "Checking for unsafe Remove-Item patterns..."
-          $unsafePatterns = Get-ChildItem -Path . -Filter *.ps1 -Recurse -ErrorAction SilentlyContinue | 
-              Select-String -Pattern 'Remove-Item.*-Recurse.*-Force' |
-              Where-Object { $_.Line -notmatch 'Remove-SafeItem|#.*Remove-Item' }
-          
-          if ($unsafePatterns) {
-              Write-Host "Potentially unsafe Remove-Item usage found:" -ForegroundColor Yellow
-              $unsafePatterns | ForEach-Object { Write-Host "  $($_.Line)" }
-              Write-Host "Consider using Remove-SafeItem instead" -ForegroundColor Yellow
-              # Warning only, don't fail
-          } else {
-              Write-Host "No unsafe Remove-Item patterns found" -ForegroundColor Green
-          }
+          . ./lib/core/base.ps1
+          . ./lib/core/file_ops.ps1
+          Write-Host "Core modules loaded successfully"
+        shell: pwsh
 
       - name: Verify protected paths
-        shell: pwsh
         run: |
-          Write-Host "Verifying protected path implementation..."
-          
-          if (-not (Test-Path ".\lib\core\base.ps1")) {
-              Write-Host "base.ps1 not found, skipping protection check" -ForegroundColor Yellow
-              exit 0
-          }
-          
-          . .\lib\core\base.ps1
+          . ./lib/core/base.ps1
+          . ./lib/core/file_ops.ps1
           
           $protectedPaths = @(
               "C:\Windows",
               "C:\Windows\System32",
-              "C:\Program Files"
+              "C:\Program Files",
+              "C:\Program Files (x86)"
           )
           
-          $allProtected = $true
           foreach ($path in $protectedPaths) {
               if (-not (Test-ProtectedPath -Path $path)) {
-                  Write-Host "FAIL: $path is not protected!" -ForegroundColor Red
-                  $allProtected = $false
-              } else {
-                  Write-Host "OK: $path is protected" -ForegroundColor Green
+                  Write-Host "FAIL: $path should be protected!" -ForegroundColor Red
+                  exit 1
               }
+              Write-Host "OK: $path is protected" -ForegroundColor Green
+          }
+        shell: pwsh
+
+      - name: Check for unsafe patterns
+        run: |
+          $hasIssues = $false
+          
+          # Check for raw Remove-Item without safety
+          $unsafePatterns = Get-ChildItem -Path lib,bin -Recurse -Filter "*.ps1" | 
+            Select-String -Pattern "Remove-Item.*-Recurse.*-Force" |
+            Where-Object { $_.Line -notmatch "Remove-SafeItem|function Remove-" }
+          
+          if ($unsafePatterns) {
+            Write-Host "Warning: Potential unsafe Remove-Item usage found:" -ForegroundColor Yellow
+            $unsafePatterns | ForEach-Object { Write-Host "  $($_.Filename):$($_.LineNumber)" }
           }
           
-          if (-not $allProtected) {
-              exit 1
+          Write-Host "Security check completed" -ForegroundColor Green
+        shell: pwsh
+
+      - name: Check for secrets
+        run: |
+          $matches = Get-ChildItem -Path . -Recurse -Filter "*.ps1" |
+            Select-String -Pattern "password|secret|api_key" -CaseSensitive:$false |
+            Where-Object { $_.Line -notmatch "^\s*#" }
+          
+          if ($matches) {
+            Write-Host "Review these lines for potential secrets:" -ForegroundColor Yellow
+            $matches | ForEach-Object { Write-Host "  $($_.Filename):$($_.LineNumber): $($_.Line.Trim())" }
           }
           
-          Write-Host "All security checks passed" -ForegroundColor Green
+          Write-Host "Secret scan completed" -ForegroundColor Green
+        shell: pwsh

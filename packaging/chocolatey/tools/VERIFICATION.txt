@@ -1,0 +1,23 @@
+VERIFICATION
+Verification is intended to assist the Chocolatey moderators and community
+in verifying that this package's contents are trustworthy.
+
+Package can be verified like this:
+
+1. Download the ZIP from GitHub releases:
+   https://github.com/bhadraagada/winmole/releases/download/v1.0.0/winmole-1.0.0-x64.zip
+
+2. Get SHA256 checksum:
+   PowerShell: (Get-FileHash winmole-1.0.0-x64.zip).Hash
+   
+3. Compare with expected hash:
+   c5671df0196ddd8aa172845c537b47159e752d7555676a04c0d95a971f4a11d3
+
+The SHA256SUMS.txt file is also available at:
+https://github.com/bhadraagada/winmole/releases/download/v1.0.0/SHA256SUMS.txt
+
+Source code is available at:
+https://github.com/bhadraagada/winmole/tree/master
+
+Build instructions are in:
+https://github.com/bhadraagada/winmole/blob/master/RELEASE.md

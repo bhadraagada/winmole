@@ -1,0 +1,47 @@
+PackageIdentifier: bhadraagada.winmole
+PackageVersion: 1.0.0
+PackageLocale: en-US
+Publisher: WinMole Project
+PublisherUrl: https://github.com/bhadraagada
+PublisherSupportUrl: https://github.com/bhadraagada/winmole/issues
+PackageName: WinMole
+PackageUrl: https://github.com/bhadraagada/winmole
+License: MIT
+LicenseUrl: https://github.com/bhadraagada/winmole/blob/master/LICENSE
+ShortDescription: Deep clean and optimize your Windows system
+Description: |
+  WinMole is an all-in-one toolkit for Windows system maintenance and optimization.
+  It combines functionality similar to CCleaner, IObit Uninstaller, WinDirStat,
+  and Task Manager into a single, powerful command-line tool.
+  
+  Features:
+  - Deep system cleanup (temp files, caches, logs)
+  - Application uninstaller with leftover detection
+  - Disk space analysis and visualization
+  - System health monitoring
+  - Cache optimization and rebuild
+  - Development artifact cleanup
+  
+  All operations include dry-run mode and whitelist protection to ensure safety.
+Moniker: winmole
+Tags:
+  - cleanup
+  - optimizer
+  - maintenance
+  - disk-space
+  - uninstaller
+  - system-tools
+  - cache-cleaner
+  - temp-files
+ReleaseNotes: |
+  Initial Windows release of WinMole.
+  
+  Features:
+  - Complete system cleanup functionality
+  - Smart app uninstaller
+  - Interactive disk analyzer
+  - Real-time system monitoring
+  - Developer tools cleanup
+ReleaseNotesUrl: https://github.com/bhadraagada/winmole/releases/tag/v1.0.0
+ManifestType: defaultLocale
+ManifestVersion: 1.4.0

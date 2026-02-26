@@ -1,0 +1,33 @@
+{
+    "version": "1.0.0",
+    "description": "Deep clean and optimize your Windows system. All-in-one toolkit for Windows maintenance.",
+    "homepage": "https://github.com/bhadraagada/winmole",
+    "license": "MIT",
+    "url": "https://github.com/bhadraagada/winmole/releases/download/v1.0.0/winmole-1.0.0-x64.zip",
+    "hash": "c5671df0196ddd8aa172845c537b47159e752d7555676a04c0d95a971f4a11d3",
+    "bin": "winmole.ps1",
+    "shortcuts": [
+        [
+            "winmole.ps1",
+            "WinMole"
+        ]
+    ],
+    "checkver": {
+        "github": "https://github.com/bhadraagada/winmole"
+    },
+    "autoupdate": {
+        "url": "https://github.com/bhadraagada/winmole/releases/download/v$version/winmole-$version-x64.zip"
+    },
+    "notes": [
+        "WinMole has been installed successfully!",
+        "Run 'winmole' or 'winmole.ps1' to get started.",
+        "",
+        "Available commands:",
+        "  winmole clean     - Deep system cleanup",
+        "  winmole uninstall - Remove unwanted apps",
+        "  winmole analyze   - Disk space analysis",
+        "  winmole status    - System health check",
+        "  winmole optimize  - Rebuild caches",
+        "  winmole purge     - Remove dev artifacts"
+    ]
+}

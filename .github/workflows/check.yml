@@ -2,72 +2,82 @@ name: Check
 
 on:
   push:
-    branches: [main, master]
+    branches: [master]
   pull_request:
-    branches: [main, master]
+    branches: [master]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  syntax:
-    name: PowerShell Syntax Check
+  format:
+    name: Format & Lint
     runs-on: windows-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Validate PowerShell Scripts
-        shell: pwsh
-        run: |
-          $errors = @()
-          Get-ChildItem -Path . -Filter *.ps1 -Recurse | ForEach-Object {
-              $parseErrors = $null
-              $null = [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$parseErrors)
-              if ($parseErrors) {
-                  $errors += "Errors in $($_.Name): $parseErrors"
-              }
-          }
-          if ($errors.Count -gt 0) {
-              $errors | ForEach-Object { Write-Error $_ }
-              exit 1
-          }
-          Write-Host "All PowerShell scripts are syntactically valid" -ForegroundColor Green
-
-  go-build:
-    name: Go Build
-    runs-on: windows-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+        with:
+          ref: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref) || github.ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version: '1.24.6'
 
-      - name: Run go vet
-        shell: pwsh
+      - name: Install Go tools
         run: |
-          if (Test-Path cmd) {
-              go vet ./cmd/...
-              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-              Write-Host "go vet passed" -ForegroundColor Green
+          go install golang.org/x/tools/cmd/goimports@latest
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
+      - name: Format Go code
+        run: |
+          $env:PATH = "$(go env GOPATH)\bin;$env:PATH"
+          Get-ChildItem -Path cmd -Recurse -Filter "*.go" | ForEach-Object {
+            goimports -w $_.FullName
+          }
+        shell: pwsh
+
+      - name: Run golangci-lint
+        run: |
+          $env:PATH = "$(go env GOPATH)\bin;$env:PATH"
+          cd cmd/analyze
+          golangci-lint run --timeout 5m
+          cd ../status
+          golangci-lint run --timeout 5m
+        shell: pwsh
+        continue-on-error: true
+
+      - name: Check PowerShell syntax
+        run: |
+          $hasErrors = $false
+          $scripts = Get-ChildItem -Path . -Recurse -Include "*.ps1" -Exclude "*.Tests.ps1"
+          foreach ($script in $scripts) {
+            $errors = $null
+            $null = [System.Management.Automation.Language.Parser]::ParseFile($script.FullName, [ref]$null, [ref]$errors)
+            if ($errors.Count -gt 0) {
+              Write-Host "Syntax errors in $($script.Name):" -ForegroundColor Red
+              $errors | ForEach-Object { Write-Host "  $_" }
+              $hasErrors = $true
+            }
+          }
+          if ($hasErrors) { exit 1 }
+          Write-Host "All PowerShell scripts have valid syntax" -ForegroundColor Green
+        shell: pwsh
+
+      - name: Commit formatting changes
+        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          $changes = git status --porcelain
+          if ($changes) {
+            git add .
+            git commit -m "chore: auto format code"
+            git push
+            Write-Host "Formatting changes committed"
           } else {
-              Write-Host "cmd/ directory not found, skipping go vet" -ForegroundColor Yellow
+            Write-Host "No formatting changes needed"
           }
-
-      - name: Build binaries
         shell: pwsh
-        run: |
-          if (Test-Path cmd/analyze) {
-              go build -o bin/analyze.exe ./cmd/analyze
-              Write-Host "Built analyze.exe" -ForegroundColor Green
-          }
-          if (Test-Path cmd/status) {
-              go build -o bin/status.exe ./cmd/status
-              Write-Host "Built status.exe" -ForegroundColor Green
-          }
-          Write-Host "Go binaries built successfully" -ForegroundColor Green

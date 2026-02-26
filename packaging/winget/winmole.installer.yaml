@@ -1,0 +1,16 @@
+PackageIdentifier: bhadraagada.winmole
+PackageVersion: 1.0.0
+InstallerLocale: en-US
+MinimumOSVersion: 10.0.0.0
+InstallerType: zip
+NestedInstallerType: portable
+NestedInstallerFiles:
+  - RelativeFilePath: winmole.ps1
+    PortableCommandAlias: winmole
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/bhadraagada/winmole/releases/download/v1.0.0/winmole-1.0.0-x64.zip
+    InstallerSha256: c5671df0196ddd8aa172845c537b47159e752d7555676a04c0d95a971f4a11d3
+    Scope: user
+ManifestType: installer
+ManifestVersion: 1.4.0
