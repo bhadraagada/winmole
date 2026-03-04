@@ -284,8 +284,9 @@ Describe "Integration Tests" -Tag "Integration" {
             try {
                 # This should not actually delete anything
                 $output = & (Join-Path $script:BIN_DIR "clean.ps1") -User -DryRun 2>&1
-                # Should complete without error
-                $LASTEXITCODE | Should -BeIn @(0, $null)
+                # Should complete without error (exit code 0 or not set)
+                $exitCode = if ($null -eq $LASTEXITCODE) { 0 } else { $LASTEXITCODE }
+                $exitCode | Should -Be 0
             }
             finally {
                 Remove-Item Env:WINMOLE_DRY_RUN -ErrorAction SilentlyContinue
