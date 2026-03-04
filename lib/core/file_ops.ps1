@@ -275,18 +275,14 @@ function Remove-OldFiles {
         [Parameter(Mandatory)]
         [string]$Path,
         
+        [Alias("Days")]
         [int]$DaysOld = 7,
         
         [Alias("Pattern")]
         [string]$Filter = "*",
         
-        [int]$Days,
-        
         [string]$Description = "Old files"
     )
-    
-    # Support both -DaysOld and -Days parameter names
-    if ($Days -gt 0) { $DaysOld = $Days }
     
     if (-not (Test-Path $Path)) {
         return @{ Removed = 0; Size = 0 }

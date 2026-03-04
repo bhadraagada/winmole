@@ -205,7 +205,7 @@ Describe "Script Validation" {
         
         BeforeDiscovery {
             $rootDir = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
-            $script:AllScripts = Get-ChildItem -Path $rootDir -Include "*.ps1" -Recurse
+            $AllScripts = Get-ChildItem -Path $rootDir -Include "*.ps1" -Recurse
         }
         
         It "validates: <_.Name>" -ForEach $AllScripts {

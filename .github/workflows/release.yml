@@ -120,6 +120,11 @@ jobs:
       - name: Display structure
         run: ls -R artifacts/
 
+      - name: Warn if not a tag push
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        run: |
+          echo "::warning::Skipping release publish - not a tag push. To publish a release, push a tag (e.g., git tag v1.0.0 && git push origin v1.0.0)"
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')

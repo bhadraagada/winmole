@@ -7,7 +7,7 @@
 [![Tests](https://img.shields.io/github/actions/workflow/status/bhadraagada/winmole/test.yml?branch=main&label=tests&style=flat-square)](https://github.com/bhadraagada/winmole/actions)
 [![CodeQL](https://img.shields.io/github/actions/workflow/status/bhadraagada/winmole/codeql.yml?branch=main&label=codeql&style=flat-square)](https://github.com/bhadraagada/winmole/actions/workflows/codeql.yml)
 [![PowerShell](https://img.shields.io/badge/PowerShell-5.1+-blue?style=flat-square&logo=powershell)](https://docs.microsoft.com/en-us/powershell/)
-[![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat-square&logo=go)](https://go.dev/)
+[![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat-square&logo=go)](https://go.dev/)
 
 ```
 ╦ ╦╦╔╗╔╔╦╗╔═╗╦  ╔═╗

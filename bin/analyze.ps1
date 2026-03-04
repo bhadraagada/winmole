@@ -80,10 +80,10 @@ function Build-AnalyzeTool {
     # Check if Go is installed
     $goCmd = Get-Command "go" -ErrorAction SilentlyContinue
     if (-not $goCmd) {
-        Write-Host "  ERROR: Go is not installed or not in PATH" -ForegroundColor Red
-        Write-Host ""
-        Write-Host "  Install Go from: https://go.dev/dl/"
-        Write-Host ""
+        [Console]::Error.WriteLine("  ERROR: Go is not installed or not in PATH")
+        [Console]::Error.WriteLine("")
+        [Console]::Error.WriteLine("  Install Go from: https://go.dev/dl/")
+        [Console]::Error.WriteLine("")
         return $false
     }
     

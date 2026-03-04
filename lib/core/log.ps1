@@ -116,10 +116,20 @@ function Write-DryRun {
 # Section Functions (for progress indication)
 # ============================================================================
 
-$global:WinMoleCurrentSection = @{
+$script:WinMoleCurrentSection = @{
     Active   = $false
     Activity = $false
     Name     = ""
+}
+
+function Reset-SectionState {
+    <#
+    .SYNOPSIS
+        Reset the section state (useful for testing)
+    #>
+    $script:WinMoleCurrentSection.Active = $false
+    $script:WinMoleCurrentSection.Activity = $false
+    $script:WinMoleCurrentSection.Name = ""
 }
 
 function Start-Section {
@@ -129,9 +139,9 @@ function Start-Section {
     #>
     param([string]$Title)
     
-    $global:WinMoleCurrentSection.Active = $true
-    $global:WinMoleCurrentSection.Activity = $false
-    $global:WinMoleCurrentSection.Name = $Title
+    $script:WinMoleCurrentSection.Active = $true
+    $script:WinMoleCurrentSection.Activity = $false
+    $script:WinMoleCurrentSection.Name = $Title
     
     $purple = $script:Colors.PurpleBold
     $nc = $script:Colors.NC
@@ -146,10 +156,10 @@ function Stop-Section {
     .SYNOPSIS
         End the current section
     #>
-    if ($global:WinMoleCurrentSection.Active -and -not $global:WinMoleCurrentSection.Activity) {
+    if ($script:WinMoleCurrentSection.Active -and -not $script:WinMoleCurrentSection.Activity) {
         Write-Success "Nothing to tidy"
     }
-    $global:WinMoleCurrentSection.Active = $false
+    $script:WinMoleCurrentSection.Active = $false
 }
 
 function Set-SectionActivity {
@@ -157,8 +167,8 @@ function Set-SectionActivity {
     .SYNOPSIS
         Mark that activity occurred in current section
     #>
-    if ($global:WinMoleCurrentSection.Active) {
-        $global:WinMoleCurrentSection.Activity = $true
+    if ($script:WinMoleCurrentSection.Active) {
+        $script:WinMoleCurrentSection.Activity = $true
     }
 }
 

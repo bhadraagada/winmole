@@ -29,3 +29,15 @@
 - name: help wanted
   color: "008672"
   description: Extra attention is needed
+
+- name: go
+  color: "00ADD8"
+  description: Go language related
+
+- name: github-actions
+  color: "2088FF"
+  description: GitHub Actions workflow related
+
+- name: powershell
+  color: "012456"
+  description: PowerShell script related
