@@ -203,6 +203,10 @@ function Show-Menu {
                         }
                     }
                 }
+                else {
+                    # Isolated ESC key press - ignore to prevent unexpected behavior
+                    $moved = $true
+                }
             }
             
             if (-not $moved) {
@@ -317,6 +321,10 @@ function Show-SelectionList {
                             }
                         }
                     }
+                }
+                else {
+                    # Isolated ESC key press - ignore to prevent unexpected behavior
+                    $moved = $true
                 }
             }
             
