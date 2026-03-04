@@ -35,18 +35,18 @@ jobs:
           New-Item -ItemType Directory -Force -Path release
           
           # Copy binaries
-          Copy-Item cmd/analyze/analyze.exe release/
-          Copy-Item cmd/status/status.exe release/
+          Copy-Item cmd/analyze/analyze.exe release/ -ErrorAction Stop
+          Copy-Item cmd/status/status.exe release/ -ErrorAction Stop
           
           # Copy PowerShell scripts
-          Copy-Item winmole.ps1 release/
-          Copy-Item install.ps1 release/
-          Copy-Item -Recurse bin release/
-          Copy-Item -Recurse lib release/
+          Copy-Item winmole.ps1 release/ -ErrorAction Stop
+          Copy-Item install.ps1 release/ -ErrorAction Stop
+          Copy-Item -Recurse bin release/ -ErrorAction Stop
+          Copy-Item -Recurse lib release/ -ErrorAction Stop
           
           # Copy docs
-          Copy-Item README.md release/
-          Copy-Item LICENSE release/
+          Copy-Item README.md release/ -ErrorAction Stop
+          Copy-Item LICENSE release/ -ErrorAction Stop
           
           # Create zip
           Compress-Archive -Path release/* -DestinationPath winmole-windows.zip

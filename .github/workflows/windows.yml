@@ -4,12 +4,20 @@ on:
   push:
     branches: [master]
     paths:
-      - '**'
+      - '*.ps1'
+      - 'bin/**'
+      - 'lib/**'
+      - 'cmd/**'
+      - 'tests/**'
       - '.github/workflows/windows.yml'
   pull_request:
     branches: [master]
     paths:
-      - '**'
+      - '*.ps1'
+      - 'bin/**'
+      - 'lib/**'
+      - 'cmd/**'
+      - 'tests/**'
       - '.github/workflows/windows.yml'
 
 jobs:

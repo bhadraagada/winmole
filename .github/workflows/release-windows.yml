@@ -77,12 +77,12 @@ jobs:
       - name: Build release artifacts (ZIP)
         shell: pwsh
         run: |
-          & scripts\build-release.ps1 -Version ${{ steps.version.outputs.VERSION }}
+          & scripts\build-release.ps1 -Version "${{ steps.version.outputs.VERSION }}"
       
       - name: Build standalone EXE
         shell: pwsh
         run: |
-          & scripts\build-exe.ps1 -Version ${{ steps.version.outputs.VERSION }}
+          & scripts\build-exe.ps1 -Version "${{ steps.version.outputs.VERSION }}"
         continue-on-error: true
       
       - name: List release artifacts
@@ -117,7 +117,7 @@ jobs:
       
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             release/winmole-${{ steps.version.outputs.VERSION }}-x64.zip

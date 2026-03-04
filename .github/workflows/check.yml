@@ -6,13 +6,18 @@ on:
   pull_request:
     branches: [master]
 
+# Note: contents:write needed only for push (auto-commit formatting)
+# Pull requests from forks have reduced permissions automatically
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   format:
     name: Format & Lint
     runs-on: windows-latest
+    # Grant write permission only on push to master (not on PRs)
+    permissions:
+      contents: ${{ github.event_name == 'push' && 'write' || 'read' }}
 
     steps:
       - name: Checkout
