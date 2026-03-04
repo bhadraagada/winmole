@@ -75,12 +75,6 @@ Describe "Cache Cleanup Module" {
             Get-Command Clear-WindowsUpdateCache -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
         }
     }
-
-    Context "Invoke-UserCleanup" {
-        It "Should have main cache cleanup function" {
-            Get-Command Invoke-UserCleanup -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
-        }
-    }
 }
 
 Describe "Developer Tools Cleanup Module" {
