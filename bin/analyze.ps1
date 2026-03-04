@@ -46,8 +46,8 @@ function Show-AnalyzeHelp {
     Write-Host ""
     Write-Host "  ${green}CONTROLS:${nc}"
     Write-Host ""
-    Write-Host "    ${cyan}↑/k${nc}     Move up"
-    Write-Host "    ${cyan}↓/j${nc}     Move down"
+    Write-Host "    ${cyan}Up/k${nc}    Move up"
+    Write-Host "    ${cyan}Down/j${nc}  Move down"
     Write-Host "    ${cyan}Enter${nc}   Expand/collapse directory"
     Write-Host "    ${cyan}Backspace${nc} Go to parent directory"
     Write-Host "    ${cyan}r${nc}       Refresh"
@@ -80,7 +80,7 @@ function Build-AnalyzeTool {
     # Check if Go is installed
     $goCmd = Get-Command "go" -ErrorAction SilentlyContinue
     if (-not $goCmd) {
-        Write-Error "Go is not installed or not in PATH"
+        Write-Host "  ERROR: Go is not installed or not in PATH" -ForegroundColor Red
         Write-Host ""
         Write-Host "  Install Go from: https://go.dev/dl/"
         Write-Host ""
@@ -102,7 +102,7 @@ function Build-AnalyzeTool {
         $buildOutput = & go build -ldflags="-s -w" -o $binaryPath . 2>&1
         
         if ($LASTEXITCODE -ne 0) {
-            Write-Error "Build failed: $buildOutput"
+            Write-Host "  ERROR: Build failed: $buildOutput" -ForegroundColor Red
             return $false
         }
         
@@ -110,7 +110,8 @@ function Build-AnalyzeTool {
         return $true
     }
     catch {
-        Write-Error "Build failed: $_"
+        $errMsg = $_.Exception.Message
+        Write-Host "  ERROR: Build failed: $errMsg" -ForegroundColor Red
         return $false
     }
     finally {
@@ -141,12 +142,12 @@ function Invoke-AnalyzeTool {
     }
     
     # Run the analyzer
-    $args = @()
+    $analyzeArgs = @()
     if ($TargetPath) {
-        $args += $TargetPath
+        $analyzeArgs += $TargetPath
     }
     
-    & $binaryPath @args
+    & $binaryPath @analyzeArgs
 }
 
 # ============================================================================
@@ -171,7 +172,7 @@ function Main {
     
     # Validate path
     if (-not (Test-Path $targetPath)) {
-        Write-Error "Path does not exist: $targetPath"
+        Write-Host "  ERROR: Path does not exist: $targetPath" -ForegroundColor Red
         return
     }
     
@@ -185,7 +186,8 @@ try {
 }
 catch {
     Write-Host ""
-    Write-Error "An error occurred: $_"
+    $errMsg = $_.Exception.Message
+    Write-Host "  ERROR: An error occurred: $errMsg" -ForegroundColor Red
     Write-Host ""
     exit 1
 }

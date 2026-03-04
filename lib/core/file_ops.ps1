@@ -277,10 +277,16 @@ function Remove-OldFiles {
         
         [int]$DaysOld = 7,
         
+        [Alias("Pattern")]
         [string]$Filter = "*",
+        
+        [int]$Days,
         
         [string]$Description = "Old files"
     )
+    
+    # Support both -DaysOld and -Days parameter names
+    if ($Days -gt 0) { $DaysOld = $Days }
     
     if (-not (Test-Path $Path)) {
         return @{ Removed = 0; Size = 0 }
@@ -319,12 +325,12 @@ function Remove-EmptyDirectories {
     $maxIterations = 5
     
     for ($i = 0; $i -lt $maxIterations; $i++) {
-        $emptyDirs = Get-ChildItem -Path $Path -Directory -Recurse -Force -ErrorAction SilentlyContinue |
+        $emptyDirs = @(Get-ChildItem -Path $Path -Directory -Recurse -Force -ErrorAction SilentlyContinue |
                      Where-Object { 
-                         (Get-ChildItem -Path $_.FullName -Force -ErrorAction SilentlyContinue | Measure-Object).Count -eq 0
-                     }
+                         @(Get-ChildItem -Path $_.FullName -Force -ErrorAction SilentlyContinue).Count -eq 0
+                     })
         
-        if (-not $emptyDirs -or $emptyDirs.Count -eq 0) {
+        if ($emptyDirs.Count -eq 0) {
             break
         }
         
@@ -355,6 +361,7 @@ function Remove-EmptyDirectories {
         }
         Set-SectionActivity
     }
+    # Note: When nothing found, let Stop-Section handle the "Nothing to tidy" message
     
     return @{ Removed = $removedCount }
 }

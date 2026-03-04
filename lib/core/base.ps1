@@ -87,6 +87,8 @@ $script:ProtectedPaths = @(
     "C:\Windows"
     "C:\Windows\System32"
     "C:\Windows\SysWOW64"
+    "C:\Program Files"
+    "C:\Program Files (x86)"
     "C:\Program Files\Windows Defender"
     "C:\Program Files (x86)\Windows Defender"
     "C:\ProgramData\Microsoft\Windows Defender"
@@ -247,19 +249,19 @@ function Format-ByteSize {
     param([long]$Bytes)
     
     if ($Bytes -ge 1TB) {
-        return "{0:N2}TB" -f ($Bytes / 1TB)
+        return "{0:N2} TB" -f ($Bytes / 1TB)
     }
     elseif ($Bytes -ge 1GB) {
-        return "{0:N2}GB" -f ($Bytes / 1GB)
+        return "{0:N1} GB" -f ($Bytes / 1GB)
     }
     elseif ($Bytes -ge 1MB) {
-        return "{0:N1}MB" -f ($Bytes / 1MB)
+        return "{0:N1} MB" -f ($Bytes / 1MB)
     }
     elseif ($Bytes -ge 1KB) {
-        return "{0:N0}KB" -f ($Bytes / 1KB)
+        return "{0:N1} KB" -f ($Bytes / 1KB)
     }
     else {
-        return "{0}B" -f $Bytes
+        return "{0} B" -f $Bytes
     }
 }
 

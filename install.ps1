@@ -24,14 +24,15 @@ $script:SourceDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $script:ShortcutName = "WinMole"
 
 # Colors
+$script:ESC = [char]27
 $script:Colors = @{
-    Red     = "`e[31m"
-    Green   = "`e[32m"
-    Yellow  = "`e[33m"
-    Blue    = "`e[34m"
-    Cyan    = "`e[36m"
-    Gray    = "`e[90m"
-    NC      = "`e[0m"
+    Red     = "$($script:ESC)[31m"
+    Green   = "$($script:ESC)[32m"
+    Yellow  = "$($script:ESC)[33m"
+    Blue    = "$($script:ESC)[34m"
+    Cyan    = "$($script:ESC)[36m"
+    Gray    = "$($script:ESC)[90m"
+    NC      = "$($script:ESC)[0m"
 }
 
 # ============================================================================
@@ -82,7 +83,7 @@ function Show-Help {
     Write-Host ""
     Write-Host "  $($c.Green)OPTIONS:$($c.NC)"
     Write-Host ""
-    Write-Host "    $($c.Cyan)-InstallDir <path>$($c.NC)   Installation directory"
+    Write-Host "    $($c.Cyan)-InstallDir [path]$($c.NC)   Installation directory"
     Write-Host "                         Default: $env:LOCALAPPDATA\WinMole"
     Write-Host ""
     Write-Host "    $($c.Cyan)-AddToPath$($c.NC)           Add WinMole to user PATH"

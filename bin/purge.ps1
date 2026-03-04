@@ -232,7 +232,8 @@ function Find-ProjectArtifacts {
             $artifact = $script:ProjectArtifacts[$artifactName]
             
             # Skip aggressive items unless requested
-            if ($artifact.Aggressive -and -not $IncludeAggressive) {
+            $isAggressive = $artifact.ContainsKey('Aggressive') -and $artifact.Aggressive
+            if ($isAggressive -and -not $IncludeAggressive) {
                 continue
             }
             
@@ -381,7 +382,7 @@ function Main {
     Write-Host "  Scanning: $searchPath"
     
     # Find artifacts
-    $artifacts = Find-ProjectArtifacts -BasePath $searchPath -IncludeAggressive:$Aggressive
+    $artifacts = @(Find-ProjectArtifacts -BasePath $searchPath -IncludeAggressive:$Aggressive)
     
     if ($artifacts.Count -eq 0) {
         Write-Host ""
