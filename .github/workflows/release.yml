@@ -4,6 +4,11 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -20,7 +25,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version: '1.24'
 
       - name: Build Binaries
         shell: pwsh
@@ -82,6 +87,12 @@ jobs:
           Write-Host "Created release archives:"
           Get-ChildItem *.zip | ForEach-Object { Write-Host "  $($_.Name) - $([math]::Round($_.Length/1MB, 2)) MB" }
 
+      - name: Generate checksums
+        shell: pwsh
+        run: |
+          Get-FileHash winmole-windows-amd64.zip -Algorithm SHA256 | ForEach-Object { "$($_.Hash)  winmole-windows-amd64.zip" } | Out-File -Encoding ascii winmole-windows-amd64.zip.sha256
+          Get-FileHash winmole-windows-arm64.zip -Algorithm SHA256 | ForEach-Object { "$($_.Hash)  winmole-windows-arm64.zip" } | Out-File -Encoding ascii winmole-windows-arm64.zip.sha256
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -89,6 +100,8 @@ jobs:
           path: |
             winmole-windows-amd64.zip
             winmole-windows-arm64.zip
+            winmole-windows-amd64.zip.sha256
+            winmole-windows-arm64.zip.sha256
             bin/*-windows-*.exe
           retention-days: 5
 
@@ -114,6 +127,8 @@ jobs:
           files: |
             artifacts/winmole-windows-amd64.zip
             artifacts/winmole-windows-arm64.zip
+            artifacts/winmole-windows-amd64.zip.sha256
+            artifacts/winmole-windows-arm64.zip.sha256
             artifacts/bin/*-windows-*.exe
           generate_release_notes: true
           draft: false

@@ -1,0 +1,8 @@
+{
+  "recommendations": [
+    "ms-vscode.powershell",
+    "golang.go",
+    "ms-vscode.vscode-json",
+    "redhat.vscode-yaml"
+  ]
+}

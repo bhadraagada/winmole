@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="120" role="img" aria-label="Contributors">
+  <rect width="100%" height="100%" fill="#f6f8fa"/>
+  <text x="20" y="45" font-family="Arial, sans-serif" font-size="24" fill="#24292f">WinMole Contributors</text>
+  <text x="20" y="80" font-family="Arial, sans-serif" font-size="16" fill="#57606a">Auto-updated weekly by GitHub Actions</text>
+</svg>

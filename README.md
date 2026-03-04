@@ -5,6 +5,7 @@
 [![Stars](https://img.shields.io/github/stars/bhadraagada/winmole?style=flat-square)](https://github.com/bhadraagada/winmole/stargazers)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 [![Tests](https://img.shields.io/github/actions/workflow/status/bhadraagada/winmole/test.yml?branch=main&label=tests&style=flat-square)](https://github.com/bhadraagada/winmole/actions)
+[![CodeQL](https://img.shields.io/github/actions/workflow/status/bhadraagada/winmole/codeql.yml?branch=main&label=codeql&style=flat-square)](https://github.com/bhadraagada/winmole/actions/workflows/codeql.yml)
 [![PowerShell](https://img.shields.io/badge/PowerShell-5.1+-blue?style=flat-square&logo=powershell)](https://docs.microsoft.com/en-us/powershell/)
 [![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat-square&logo=go)](https://go.dev/)
 
@@ -132,6 +133,16 @@ Select Categories to Clean - 18.5 GB (8 selected)
   ○ current-work       856 MB | node_modules  | Recent
 ```
 
+## Screenshots
+
+Screenshots and demo assets live in `docs/screenshots/`.
+
+- `docs/screenshots/menu.png`
+- `docs/screenshots/clean-run.png`
+- `docs/screenshots/analyze-tui.png`
+- `docs/screenshots/status-tui.png`
+- `docs/screenshots/purge-select.png`
+
 ## Tips
 
 - **Safety**: Built with strict protections. Preview changes with `winmole clean -DryRun`
@@ -233,6 +244,19 @@ Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md)
 3. Make your changes
 4. Run tests: `Invoke-Pester -Path .\tests\`
 5. Submit a pull request
+
+## Community
+
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Security Policy](SECURITY.md)
+- [Contributing Guide](CONTRIBUTING.md)
+- [Changelog](CHANGELOG.md)
+- [Issue Templates](.github/ISSUE_TEMPLATE/)
+- [PR Template](.github/PULL_REQUEST_TEMPLATE.md)
+
+## Contributors
+
+[![Contributors](./CONTRIBUTORS.svg)](https://github.com/bhadraagada/winmole/graphs/contributors)
 
 ## License
 

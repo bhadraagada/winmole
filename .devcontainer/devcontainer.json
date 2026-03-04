@@ -1,0 +1,18 @@
+{
+  "name": "WinMole Dev Container",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "features": {
+    "ghcr.io/devcontainers/features/go:1": {
+      "version": "1.24"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.powershell",
+        "golang.go"
+      ]
+    }
+  },
+  "postCreateCommand": "go version"
+}

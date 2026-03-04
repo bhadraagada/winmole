@@ -17,7 +17,6 @@ $RECYCLE.BIN/
 *.swo
 .idea/
 .vscode/*.code-workspace
-.vscode/settings.json
 *.sublime-workspace
 *.sublime-project
 

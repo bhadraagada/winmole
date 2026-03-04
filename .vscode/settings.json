@@ -1,0 +1,9 @@
+{
+  "files.insertFinalNewline": true,
+  "files.trimTrailingWhitespace": true,
+  "editor.tabSize": 4,
+  "editor.detectIndentation": false,
+  "powershell.codeFormatting.preset": "OTBS",
+  "go.formatTool": "gofmt",
+  "go.useLanguageServer": true
+}
