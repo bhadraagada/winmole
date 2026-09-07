@@ -78,19 +78,19 @@ function Get-PathSize {
         [string]$Path
     )
     
-    if (-not (Test-Path $Path)) {
+    if (-not (Test-Path -LiteralPath $Path)) {
         return 0
     }
     
     try {
-        if (Test-Path $Path -PathType Container) {
-            $size = (Get-ChildItem -Path $Path -Recurse -Force -ErrorAction SilentlyContinue | 
+        if (Test-Path -LiteralPath $Path -PathType Container) {
+            $size = (Get-ChildItem -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue |
                      Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
             if ($null -eq $size) { return 0 }
             return [long]$size
         }
         else {
-            return (Get-Item $Path -Force -ErrorAction SilentlyContinue).Length
+            return (Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue).Length
         }
     }
     catch {
@@ -142,7 +142,7 @@ function Remove-SafeItem {
     }
     
     # Check if path exists
-    if (-not (Test-Path $Path)) {
+    if (-not (Test-Path -LiteralPath $Path)) {
         Write-Debug "Path does not exist: $Path"
         return $false
     }
@@ -162,13 +162,13 @@ function Remove-SafeItem {
     
     # Perform removal
     try {
-        $isDirectory = Test-Path $Path -PathType Container
+        $isDirectory = Test-Path -LiteralPath $Path -PathType Container
         
         if ($isDirectory) {
-            Remove-Item -Path $Path -Recurse -Force -ErrorAction Stop
+            Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop
         }
         else {
-            Remove-Item -Path $Path -Force -ErrorAction Stop
+            Remove-Item -LiteralPath $Path -Force -ErrorAction Stop
         }
         
         # Update statistics
@@ -210,7 +210,7 @@ function Remove-SafeItems {
             continue
         }
         
-        if (-not (Test-Path $path)) {
+        if (-not (Test-Path -LiteralPath $path)) {
             continue
         }
         
@@ -223,12 +223,12 @@ function Remove-SafeItems {
         }
         
         try {
-            $isDirectory = Test-Path $path -PathType Container
+            $isDirectory = Test-Path -LiteralPath $path -PathType Container
             if ($isDirectory) {
-                Remove-Item -Path $path -Recurse -Force -ErrorAction Stop
+                Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction Stop
             }
             else {
-                Remove-Item -Path $path -Force -ErrorAction Stop
+                Remove-Item -LiteralPath $path -Force -ErrorAction Stop
             }
             $totalSize += $size
             $removedCount++
@@ -288,13 +288,13 @@ function Remove-OldFiles {
     # Support both -DaysOld and -Days parameter names
     if ($Days -gt 0) { $DaysOld = $Days }
     
-    if (-not (Test-Path $Path)) {
+    if (-not (Test-Path -LiteralPath $Path)) {
         return @{ Removed = 0; Size = 0 }
     }
     
     $cutoffDate = (Get-Date).AddDays(-$DaysOld)
     
-    $oldFiles = Get-ChildItem -Path $Path -Filter $Filter -File -Force -ErrorAction SilentlyContinue |
+    $oldFiles = Get-ChildItem -LiteralPath $Path -Filter $Filter -File -Force -ErrorAction SilentlyContinue |
                 Where-Object { $_.LastWriteTime -lt $cutoffDate }
     
     if ($oldFiles) {
@@ -317,7 +317,7 @@ function Remove-EmptyDirectories {
         [string]$Description = "Empty directories"
     )
     
-    if (-not (Test-Path $Path)) {
+    if (-not (Test-Path -LiteralPath $Path)) {
         return @{ Removed = 0 }
     }
     
@@ -325,9 +325,9 @@ function Remove-EmptyDirectories {
     $maxIterations = 5
     
     for ($i = 0; $i -lt $maxIterations; $i++) {
-        $emptyDirs = @(Get-ChildItem -Path $Path -Directory -Recurse -Force -ErrorAction SilentlyContinue |
+        $emptyDirs = @(Get-ChildItem -LiteralPath $Path -Directory -Recurse -Force -ErrorAction SilentlyContinue |
                      Where-Object { 
-                         @(Get-ChildItem -Path $_.FullName -Force -ErrorAction SilentlyContinue).Count -eq 0
+                         @(Get-ChildItem -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue).Count -eq 0
                      })
         
         if ($emptyDirs.Count -eq 0) {
@@ -338,7 +338,7 @@ function Remove-EmptyDirectories {
             if (Test-SafePath -Path $dir.FullName) {
                 if (-not $script:DryRun) {
                     try {
-                        Remove-Item -Path $dir.FullName -Force -ErrorAction Stop
+                        Remove-Item -LiteralPath $dir.FullName -Force -ErrorAction Stop
                         $removedCount++
                     }
                     catch {
@@ -378,7 +378,7 @@ function Clear-DirectoryContents {
         [string]$Description = ""
     )
     
-    if (-not (Test-Path $Path)) {
+    if (-not (Test-Path -LiteralPath $Path)) {
         return @{ Removed = 0; Size = 0 }
     }
     
@@ -386,7 +386,7 @@ function Clear-DirectoryContents {
         return @{ Removed = 0; Size = 0 }
     }
     
-    $items = Get-ChildItem -Path $Path -Force -ErrorAction SilentlyContinue
+    $items = Get-ChildItem -LiteralPath $Path -Force -ErrorAction SilentlyContinue
     if ($items) {
         $paths = $items | ForEach-Object { $_.FullName }
         $desc = if ($Description) { $Description } else { Split-Path -Leaf $Path }

@@ -90,7 +90,7 @@ $script:Config = @{
     MaxIterations          = 100     # Max iterations for scans
     ConfigPath             = "$env:USERPROFILE\.config\winmole"
     CachePath              = "$env:USERPROFILE\.cache\winmole"
-    WhitelistFile          = "$env:USERPROFILE\.config\winmole\whitelist.txt"
+    WhitelistFile          = "$env:USERPROFILE\.config\winmole\whitelist"
 }
 
 # ============================================================================
@@ -236,9 +236,11 @@ function Test-Whitelisted {
         }
     }
     
-    # Check user whitelist file
-    if (Test-Path $script:Config.WhitelistFile) {
-        $userPatterns = Get-Content $script:Config.WhitelistFile -ErrorAction SilentlyContinue
+    # Keep reading the old .txt name so existing installations remain protected.
+    foreach ($whitelistFile in @($script:Config.WhitelistFile, "$($script:Config.WhitelistFile).txt")) {
+        if (-not (Test-Path -LiteralPath $whitelistFile)) { continue }
+
+        $userPatterns = Get-Content -LiteralPath $whitelistFile -ErrorAction SilentlyContinue
         foreach ($pattern in $userPatterns) {
             $pattern = $pattern.Trim()
             if ($pattern -and -not $pattern.StartsWith('#')) {
