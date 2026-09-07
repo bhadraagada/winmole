@@ -4,7 +4,7 @@
 
 **Security Audit & Compliance Report**
 
-Version 1.0.0 | January 2026
+Report version 1.0.0 | January 2026
 
 ---
 
@@ -33,8 +33,8 @@ Version 1.0.0 | January 2026
 |-----------|---------|
 | Audit Date | January 2026 |
 | Audit Conclusion | **PASSED** |
-| WinMole Version | V1.0.0 |
-| Audited Branch | `main` (HEAD) |
+| WinMole Version | Pre-release snapshot from January 2026 |
+| Audited Branch | `master` |
 | Scope | PowerShell scripts, Go binaries, Configuration |
 | Methodology | Static analysis, Threat modeling, Code review |
 | Review Cycle | Every 6 months or after major feature additions |
@@ -45,7 +45,7 @@ Version 1.0.0 | January 2026
 - Protected path system blocks Windows system directories
 - Comprehensive protection for Program Files, Windows folder, and system components
 - Full user control with dry-run and whitelist capabilities
-- All operations support `-WhatIf` for preview
+- Cleanup commands support `-DryRun` previews
 
 ---
 
@@ -116,7 +116,7 @@ $env:SystemRoot          # System root variable
 When running with Administrator privileges:
 
 - Operations restricted to user-controlled directories
-- System directories require explicit override
+- System directories are rejected
 - UAC prompts for elevation when needed
 
 ### Interactive Analyzer (Go)
@@ -125,7 +125,7 @@ The analyzer (`winmole analyze`) uses a different security model:
 
 - Runs with standard user permissions by default
 - All deletions require explicit user confirmation
-- Protected paths enforced at PowerShell layer
+- Protected paths enforced by the analyzer before deletion
 
 **Code:** `cmd/analyze/main.go`
 
@@ -184,7 +184,7 @@ C:\Projects\MyProject\node_modules
 - Applies to all operations (clean, optimize, purge)
 - Supports absolute paths
 
-**Code:** `lib/core/file_ops.ps1:Test-WhitelistedPath()`
+**Code:** `lib/core/base.ps1:Test-Whitelisted()`
 
 #### Interactive Confirmations
 
@@ -198,16 +198,16 @@ Required for:
 
 ## Testing & Compliance
 
-### Test Coverage
+### Test scope
 
 WinMole uses **Pester** for automated testing.
 
-| Test Category | Coverage | Key Tests |
-|---------------|----------|-----------|
-| Core File Operations | 95% | Path validation, protected path detection |
-| Cleaning Logic | 87% | Safe removal, size calculation |
-| Format Functions | 100% | Byte formatting, path handling |
-| Security Controls | 100% | Protected paths, whitelist |
+| Test Category | Key Tests |
+|---------------|-----------|
+| Core File Operations | Path validation, protected path detection |
+| Cleaning Logic | Safe removal, size calculation |
+| Format Functions | Byte formatting, path handling |
+| Security Controls | Protected paths, whitelist |
 
 **Test Execution:**
 

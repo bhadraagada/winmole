@@ -7,7 +7,7 @@ Security updates are provided for the most recent release and for `master`.
 | Version          | Supported |
 | ---------------- | --------- |
 | `master`         | yes       |
-| v0.1.0 (current) | yes       |
+| v0.1.1 (current) | yes       |
 | older tags       | no        |
 
 WinMole deletes files and, for some operations, runs with administrator rights,

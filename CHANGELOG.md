@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Warp) and flickers in the rest. Frames are now redrawn in place with ANSI
   cursor control via a new `Write-MenuFrame` helper, which also keeps the
   banner and system info visible while navigating. (#31)
+- Progress bars in `purge` and `uninstall` now advance correctly. The shared
+  helper no longer shadows PowerShell's built-in `Write-Progress` cmdlet. (#18)
 
 ## [0.1.0] - 2026-07-28
 
@@ -67,4 +69,5 @@ First tagged release.
   `lib/core/log.ps1` shadows the built-in `Write-Progress` with an incompatible
   signature. (#18)
 
+[0.1.1]: https://github.com/bhadraagada/winmole/releases/tag/v0.1.1
 [0.1.0]: https://github.com/bhadraagada/winmole/releases/tag/v0.1.0

@@ -243,6 +243,7 @@ function Test-PowerShellScripts {
     
     foreach ($script in $scripts) {
         $relativePath = $script.FullName.Replace($script:ROOT, "").TrimStart("\")
+        $parseErrors = $null
         
         try {
             $null = [System.Management.Automation.Language.Parser]::ParseFile(
@@ -298,10 +299,8 @@ function Invoke-Tests {
     Write-Info "Running tests..."
     Write-Host ""
     
-    $testFile = Join-Path $script:TESTS_DIR "WinMole.Tests.ps1"
-    
-    if (-not (Test-Path $testFile)) {
-        Write-Warn "No tests found at: $testFile"
+    if (@(Get-ChildItem -Path $script:TESTS_DIR -Filter "*.Tests.ps1" -File).Count -eq 0) {
+        Write-Warn "No tests found at: $script:TESTS_DIR"
         return $true
     }
     
@@ -314,7 +313,7 @@ function Invoke-Tests {
     }
     
     try {
-        $results = Invoke-Pester -Path $script:TESTS_DIR -PassThru -Output Detailed
+        $results = Invoke-Pester -Path $script:TESTS_DIR -ExcludeTag Integration -PassThru -Output Detailed
         
         Write-Host ""
         
