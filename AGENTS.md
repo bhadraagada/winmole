@@ -11,7 +11,7 @@ This guide provides AI coding assistants with essential commands, patterns, and 
 Before any operation:
 
 - Use `Remove-SafeItem` helpers (never raw `Remove-Item -Recurse -Force`)
-- Check protection: `Test-ProtectedPath`, `Test-WhitelistedPath`
+- Check protection: `Test-ProtectedPath`, `Test-Whitelisted`
 - Test first: `-WhatIf` parameter or `$env:WINMOLE_DRY_RUN = 1`
 - Validate syntax: PowerShell parser
 - Run tests: `Invoke-Pester -Path .\tests\`
@@ -64,7 +64,7 @@ Import-Module Pester -MinimumVersion 5.0
 Invoke-Pester -Path .\tests\ -ExcludeTag Integration
 
 # Run specific test
-Invoke-Pester -Path .\tests\WinMole.Tests.ps1
+Invoke-Pester -Path .\tests\Commands.Tests.ps1
 
 # PowerShell syntax check (all scripts)
 Get-ChildItem -Path . -Filter *.ps1 -Recurse | ForEach-Object {
@@ -115,7 +115,7 @@ winmole/
 ├── scripts/              # Build and test automation
 │   └── build.ps1         # Main build script
 └── tests/                # Pester tests
-    └── WinMole.Tests.ps1
+    └── *.Tests.ps1
 ```
 
 **Decision Tree**:

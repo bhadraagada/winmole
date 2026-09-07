@@ -278,13 +278,15 @@ function Install-WinMole {
         $src = Join-Path $script:SourceDir $item
         $dst = Join-Path $InstallDir $item
         
-        if (Test-Path $src) {
+        if (Test-Path -LiteralPath $src) {
             try {
-                if ((Get-Item $src).PSIsContainer) {
-                    Copy-Item -Path $src -Destination $dst -Recurse -Force
+                if ((Get-Item -LiteralPath $src).PSIsContainer) {
+                    New-Item -ItemType Directory -Path $dst -Force | Out-Null
+                    Get-ChildItem -LiteralPath $src -Force |
+                        Copy-Item -Destination $dst -Recurse -Force
                 }
                 else {
-                    Copy-Item -Path $src -Destination $dst -Force
+                    Copy-Item -LiteralPath $src -Destination $dst -Force
                 }
                 Write-Success "Copied: $item"
             }

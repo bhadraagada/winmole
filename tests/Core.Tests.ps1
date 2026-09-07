@@ -79,6 +79,26 @@ Describe "Core Module - base.ps1" {
         }
     }
 
+    Context "Test-Whitelisted" {
+        It "honors the documented and legacy whitelist file names" {
+            $originalWhitelistFile = $script:Config.WhitelistFile
+            $script:Config.WhitelistFile = Join-Path $script:TEST_TEMP "whitelist"
+            $documentedPath = Join-Path $script:TEST_TEMP "documented-cache"
+            $legacyPath = Join-Path $script:TEST_TEMP "legacy-cache"
+
+            try {
+                Set-Content -LiteralPath $script:Config.WhitelistFile -Value $documentedPath
+                Set-Content -LiteralPath "$($script:Config.WhitelistFile).txt" -Value $legacyPath
+
+                Test-Whitelisted -Path $documentedPath | Should -Be $true
+                Test-Whitelisted -Path $legacyPath | Should -Be $true
+            }
+            finally {
+                $script:Config.WhitelistFile = $originalWhitelistFile
+            }
+        }
+    }
+
     Context "Test-IsAdmin" {
         It "returns a boolean" {
             Test-IsAdmin | Should -BeOfType [bool]
@@ -171,6 +191,15 @@ Describe "File Operations - file_ops.ps1" {
     }
 
     Context "Remove-EmptyDirectories" {
+        It "handles directory names containing wildcard characters" {
+            $emptyDir = Join-Path $script:testDir "unfinished [name"
+            New-Item -ItemType Directory -Path $emptyDir -Force | Out-Null
+
+            { Remove-EmptyDirectories -Path $script:testDir } | Should -Not -Throw
+
+            Test-Path -LiteralPath $emptyDir | Should -Be $false
+        }
+
         It "removes empty directories" {
             $emptyDir = Join-Path $script:testDir "empty"
             New-Item -ItemType Directory -Path $emptyDir -Force | Out-Null

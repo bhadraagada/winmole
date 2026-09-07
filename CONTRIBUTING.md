@@ -26,7 +26,7 @@ Import-Module Pester -MinimumVersion 5.0
 Invoke-Pester -Path .\tests\ -ExcludeTag Integration
 
 # Run specific test file
-Invoke-Pester -Path .\tests\WinMole.Tests.ps1
+Invoke-Pester -Path .\tests\Commands.Tests.ps1
 ```
 
 ### Building Go Binaries
@@ -210,7 +210,7 @@ winmole/
 
 - Windows 10/11
 - PowerShell 5.1+ (included with Windows)
-- Go 1.21+ (for building TUI tools)
+- Go 1.24+ (for building TUI tools)
 - Pester 5.0+ (for running tests)
 
 ## Getting Help
@@ -221,4 +221,4 @@ winmole/
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the MIT License.
+By contributing, you agree that your contributions will be licensed under the GPL-3.0 License.

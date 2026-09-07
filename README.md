@@ -4,9 +4,9 @@
 
 [![Stars](https://img.shields.io/github/stars/bhadraagada/winmole?style=flat-square)](https://github.com/bhadraagada/winmole/stargazers)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg?style=flat-square)](LICENSE)
-[![Tests](https://img.shields.io/github/actions/workflow/status/bhadraagada/winmole/test.yml?branch=main&label=tests&style=flat-square)](https://github.com/bhadraagada/winmole/actions)
+[![Tests](https://img.shields.io/github/actions/workflow/status/bhadraagada/winmole/test.yml?branch=master&label=tests&style=flat-square)](https://github.com/bhadraagada/winmole/actions)
 [![PowerShell](https://img.shields.io/badge/PowerShell-5.1+-blue?style=flat-square&logo=powershell)](https://docs.microsoft.com/en-us/powershell/)
-[![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat-square&logo=go)](https://go.dev/)
+[![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat-square&logo=go)](https://go.dev/)
 
 ```
 ╦ ╦ ╦ ╔╗╔ ╔╦╗ ╔═╗ ╦   ╔═╗
@@ -143,7 +143,7 @@ Select Categories to Clean - 18.5 GB (8 selected)
 
 - Windows 10/11
 - PowerShell 5.1+ (included with Windows)
-- Go 1.21+ (optional, for building TUI tools)
+- Go 1.24+ (optional, for building TUI tools)
 
 ## Installation Options
 
