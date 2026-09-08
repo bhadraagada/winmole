@@ -5,6 +5,19 @@ All notable changes to WinMole are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Future releases include a `SHA256SUMS` file for the ZIP archives. (#29)
+
+### Fixed
+
+- `clean` no longer scans all of LocalAppData for empty directories or prints
+  internal return values during a dry run. (#39)
+- The installer refuses to overwrite or uninstall an unrecognized directory and
+  routes uninstall deletion through the shared path protections.
+
 ## [0.1.1] - 2026-07-31
 
 ### Fixed
@@ -62,12 +75,6 @@ First tagged release.
 - A Pester regression test for `Get-InstalledPrograms` under StrictMode. (#11)
 - Go test coverage for the disk analyzer, one case per root cause above plus a
   test pinning that protected system paths still refuse deletion. (#15)
-
-### Known issues
-
-- Progress bars in `purge` and `uninstall` are stuck at 0%, because a helper in
-  `lib/core/log.ps1` shadows the built-in `Write-Progress` with an incompatible
-  signature. (#18)
 
 [0.1.1]: https://github.com/bhadraagada/winmole/releases/tag/v0.1.1
 [0.1.0]: https://github.com/bhadraagada/winmole/releases/tag/v0.1.0

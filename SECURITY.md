@@ -17,14 +17,10 @@ about a path that should be protected but is not are especially welcome.
 
 ## Reporting a Vulnerability
 
-Please do not open public issues for security vulnerabilities.
+Private vulnerability reporting is not currently enabled. Open an issue marked
+`SECURITY` without exploit details and ask the maintainer for a private contact.
 
-Use one of these channels:
-
-1. GitHub Security Advisories (preferred): open a private vulnerability report in this repository.
-2. If private advisories are unavailable, open an issue and clearly mark it as `SECURITY` with minimal exploit detail, then we will follow up privately.
-
-When reporting, include:
+After the maintainer provides a private channel, include:
 
 - A clear description of the vulnerability
 - Steps to reproduce
