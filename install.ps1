@@ -36,6 +36,7 @@ $script:VERSION = "0.1.1"
 $script:SourceDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $script:ShortcutName = "WinMole"
 . "$script:SourceDir\lib\core\file_ops.ps1"
+$script:DryRun = $false
 
 # Colors
 $script:ESC = [char]27

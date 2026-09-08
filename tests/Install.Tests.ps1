@@ -80,4 +80,32 @@ Describe "Installer" {
 
         Test-Path -LiteralPath (Join-Path $installDir "winmole.ps1") | Should -BeTrue
     }
+
+    It "does not inherit cleanup dry-run mode during uninstall" {
+        $root = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
+        $installDir = Join-Path $TestDrive "dry-run-install"
+        $originalDryRun = $env:WINMOLE_DRY_RUN
+
+        foreach ($relativePath in @("winmole.ps1", "winmole.cmd", "bin\clean.ps1", "lib\core\base.ps1")) {
+            $marker = Join-Path $installDir $relativePath
+            New-Item -ItemType Directory -Path (Split-Path -Parent $marker) -Force | Out-Null
+            Set-Content -LiteralPath $marker -Value "installed"
+        }
+
+        try {
+            $env:WINMOLE_DRY_RUN = "1"
+            . (Join-Path $root "install.ps1") -Help *> $null
+            $InstallDir = $installDir
+            Mock Remove-FromUserPath { $true }
+            Mock Remove-StartMenuShortcut { $true }
+            Mock Read-Host { "n" }
+
+            Uninstall-WinMole *> $null
+
+            Test-Path -LiteralPath $installDir | Should -BeFalse
+        }
+        finally {
+            $env:WINMOLE_DRY_RUN = $originalDryRun
+        }
+    }
 }
