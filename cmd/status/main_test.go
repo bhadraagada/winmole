@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/shirou/gopsutil/v3/net"
 )
 
@@ -60,5 +61,39 @@ func TestNetworkViewShowsRates(t *testing.T) {
 	view := m.View()
 	if !strings.Contains(view, "1.0 KB/s") || !strings.Contains(view, "2.0 KB/s") {
 		t.Fatalf("network view does not show byte rates: %s", view)
+	}
+}
+
+func TestRefreshesDoNotOverlap(t *testing.T) {
+	m := newModel()
+	refresh := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}}
+	if !m.collecting {
+		t.Fatal("initial collection is not marked in flight")
+	}
+	for _, trigger := range []string{"scheduled", "manual"} {
+		// A refresh during either collection must not start another command.
+		updated, command := m.Update(refresh)
+		if command != nil || !updated.(model).collecting {
+			t.Fatal("manual refresh overlaps an active collection")
+		}
+		updated, _ = m.Update(metricsMsg{})
+		m = updated.(model)
+		if m.collecting {
+			t.Fatal("completed collection did not release the refresh guard")
+		}
+		if trigger == "scheduled" {
+			m.animFrame = 1
+			updated, command = m.Update(tickMsg{})
+		} else {
+			updated, command = m.Update(refresh)
+		}
+		m = updated.(model)
+		if command == nil || !m.collecting {
+			t.Fatalf("%s collection did not start with the guard set", trigger)
+		}
+		updated, command = m.Update(refresh)
+		if command != nil || !updated.(model).collecting {
+			t.Fatalf("manual refresh overlaps %s collection", trigger)
+		}
 	}
 }

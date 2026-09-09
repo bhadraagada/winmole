@@ -388,8 +388,8 @@ type metricsMsg MetricsSnapshot
 
 func newModel() model {
 	return model{
-		collector: NewCollector(),
-		animFrame: 0,
+		collector:  NewCollector(),
+		collecting: true,
 	}
 }
 
@@ -421,8 +421,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "c":
 			m.catHidden = !m.catHidden
 		case "r":
-			m.collecting = true
-			return m, m.collectMetrics()
+			if !m.collecting {
+				m.collecting = true
+				return m, m.collectMetrics()
+			}
 		}
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -430,6 +432,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		m.animFrame++
 		if m.animFrame%2 == 0 && !m.collecting {
+			m.collecting = true
 			return m, tea.Batch(
 				m.collectMetrics(),
 				tickCmd(),
