@@ -42,15 +42,14 @@ function Show-StatusHelp {
     Write-Host "    ${cyan}CPU${nc}        Usage per core with graph"
     Write-Host "    ${cyan}Memory${nc}     RAM usage and availability"
     Write-Host "    ${cyan}Disk${nc}       Drive usage and free space"
-    Write-Host "    ${cyan}Network${nc}    Bytes sent/received per interface"
+    Write-Host "    ${cyan}Network${nc}    Upload/download rates per interface (bytes/sec)"
     Write-Host "    ${cyan}Processes${nc}  Top processes by CPU/memory"
     Write-Host ""
     Write-Host "  ${green}CONTROLS:${nc}"
     Write-Host ""
-    Write-Host "    ${cyan}Tab${nc}        Cycle through panels"
-    Write-Host "    ${cyan}1-4${nc}        Jump to panel (CPU/Mem/Disk/Net)"
+    Write-Host "    ${cyan}c${nc}          Toggle WinMole animation"
     Write-Host "    ${cyan}r${nc}          Refresh now"
-    Write-Host "    ${cyan}q/Esc${nc}      Quit"
+    Write-Host "    ${cyan}q/Ctrl+C${nc}   Quit"
     Write-Host ""
     Write-Host "  ${green}EXAMPLES:${nc}"
     Write-Host ""
@@ -125,7 +124,8 @@ function Invoke-StatusTool {
     if (-not (Test-Path $binaryPath)) {
         $needsBuild = $true
     }
-    elseif ((Get-Item $srcPath).LastWriteTime -gt (Get-Item $binaryPath).LastWriteTime) {
+    elseif ((Test-Path -LiteralPath $srcPath) -and
+        (Get-Item -LiteralPath $srcPath).LastWriteTime -gt (Get-Item -LiteralPath $binaryPath).LastWriteTime) {
         $needsBuild = $true
     }
     
