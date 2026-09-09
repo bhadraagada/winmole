@@ -87,6 +87,8 @@ type NetworkInfo struct {
 	BytesRecv   uint64
 	PacketsSent uint64
 	PacketsRecv uint64
+	SendRate    float64
+	ReceiveRate float64
 }
 
 type ProcessInfo struct {
@@ -211,21 +213,11 @@ func (c *Collector) Collect() MetricsSnapshot {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		// Manual refreshes can overlap, so sample counters and update their baseline together.
+		c.mu.Lock()
+		defer c.mu.Unlock()
 		if netIO, err := net.IOCountersWithContext(ctx, true); err == nil {
-			var networks []NetworkInfo
-			for _, io := range netIO {
-				// Skip loopback and inactive interfaces
-				if io.Name == "Loopback Pseudo-Interface 1" || (io.BytesSent == 0 && io.BytesRecv == 0) {
-					continue
-				}
-				networks = append(networks, NetworkInfo{
-					Name:        io.Name,
-					BytesSent:   io.BytesSent,
-					BytesRecv:   io.BytesRecv,
-					PacketsSent: io.PacketsSent,
-					PacketsRecv: io.PacketsRecv,
-				})
-			}
+			networks := c.networkSnapshot(netIO, time.Now())
 			mu.Lock()
 			snapshot.Networks = networks
 			mu.Unlock()
@@ -281,6 +273,40 @@ func (c *Collector) Collect() MetricsSnapshot {
 	snapshot.HealthScore, snapshot.HealthMessage = calculateHealthScore(snapshot)
 
 	return snapshot
+}
+
+// networkSnapshot updates the baseline while the caller holds c.mu.
+func (c *Collector) networkSnapshot(counters []net.IOCountersStat, sampledAt time.Time) []NetworkInfo {
+	elapsed := sampledAt.Sub(c.prevNetTime).Seconds()
+	current := make(map[string]net.IOCountersStat, len(counters))
+	var networks []NetworkInfo
+	for _, io := range counters {
+		current[io.Name] = io
+		// Keep zero counters in the baseline so an interface's first traffic has a rate.
+		if io.Name == "Loopback Pseudo-Interface 1" || (io.BytesSent == 0 && io.BytesRecv == 0) {
+			continue
+		}
+		network := NetworkInfo{
+			Name:        io.Name,
+			BytesSent:   io.BytesSent,
+			BytesRecv:   io.BytesRecv,
+			PacketsSent: io.PacketsSent,
+			PacketsRecv: io.PacketsRecv,
+		}
+		if previous, ok := c.prevNet[io.Name]; ok && !c.prevNetTime.IsZero() && elapsed > 0 {
+			// Interface resets must not underflow unsigned byte counters.
+			if io.BytesSent >= previous.BytesSent {
+				network.SendRate = float64(io.BytesSent-previous.BytesSent) / elapsed
+			}
+			if io.BytesRecv >= previous.BytesRecv {
+				network.ReceiveRate = float64(io.BytesRecv-previous.BytesRecv) / elapsed
+			}
+		}
+		networks = append(networks, network)
+	}
+	c.prevNet = current
+	c.prevNetTime = sampledAt
+	return networks
 }
 
 func calculateHealthScore(s MetricsSnapshot) (int, string) {
@@ -527,8 +553,8 @@ func (m model) View() string {
 			}
 			b.WriteString(fmt.Sprintf("  %s ↑%s ↓%s\n",
 				labelStyle.Render(truncateString(n.Name, 20)+":"),
-				valueStyle.Render(formatBytes(n.BytesSent)),
-				valueStyle.Render(formatBytes(n.BytesRecv)),
+				valueStyle.Render(formatBytes(uint64(n.SendRate))+"/s"),
+				valueStyle.Render(formatBytes(uint64(n.ReceiveRate))+"/s"),
 			))
 		}
 		b.WriteString("\n")
