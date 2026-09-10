@@ -51,4 +51,15 @@ Describe 'Analyzer JSON command' {
         Get-Content -LiteralPath $stdout -Raw | Should -BeNullOrEmpty
         Get-Content -LiteralPath $stderr -Raw | Should -Match 'Not an existing directory'
     }
+
+    It 'rebuilds changed report source without contaminating JSON stdout' {
+        Copy-Item -LiteralPath "$root\cmd" -Destination $package -Recurse
+        Copy-Item -LiteralPath "$root\go.mod", "$root\go.sum" -Destination $package
+        (Get-Item -LiteralPath "$package\cmd\analyze\report.go").LastWriteTime = (Get-Date).AddMinutes(1)
+        & $shell -NoProfile -File "$package\winmole.ps1" analyze $fixture -Json > $stdout 2> $stderr
+        $LASTEXITCODE | Should -Be 0
+        $report = Get-Content -LiteralPath $stdout -Raw | ConvertFrom-Json
+        $report.total_bytes | Should -Be 5
+        Get-Content -LiteralPath $stderr -Raw | Should -Match 'Build complete'
+    }
 }
