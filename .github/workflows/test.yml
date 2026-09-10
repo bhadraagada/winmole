@@ -24,6 +24,11 @@ jobs:
           Install-Module -Name Pester -Force -SkipPublisherCheck -MinimumVersion 5.0
           Import-Module Pester -MinimumVersion 5.0
 
+      - name: Set up Go for analyzer command tests
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.24'
+
       - name: Run Pester Tests
         shell: pwsh
         run: |

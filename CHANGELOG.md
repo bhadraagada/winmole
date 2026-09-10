@@ -5,6 +5,19 @@ All notable changes to WinMole are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `winmole analyze [path] -Json` and `analyze.exe -json` produce read-only,
+  machine-readable disk usage reports with byte counts and partial-scan flags.
+  Reports work without an interactive terminal and preserve literal paths.
+
+### Fixed
+
+- The analyzer marks files it cannot stat as partial instead of reporting
+  an apparently complete zero-byte measurement.
+
 ## [0.1.1] - 2026-07-31
 
 ### Fixed

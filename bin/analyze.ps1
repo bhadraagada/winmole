@@ -7,7 +7,9 @@ param(
     [Parameter(Position = 0)]
     [string]$Path,
     
-    [switch]$Help
+    [switch]$Help,
+
+    [switch]$Json
 )
 
 $ErrorActionPreference = "Stop"
@@ -39,10 +41,12 @@ function Show-AnalyzeHelp {
     Write-Host "  ${green}USAGE:${nc}"
     Write-Host ""
     Write-Host "    winmole analyze [path]"
+    Write-Host "    winmole analyze [path] -Json"
     Write-Host ""
     Write-Host "  ${green}ARGUMENTS:${nc}"
     Write-Host ""
     Write-Host "    ${cyan}path${nc}    Directory to analyze (default: current directory)"
+    Write-Host "    ${cyan}-Json${nc}   Write a read-only JSON report without opening the TUI"
     Write-Host ""
     Write-Host "  ${green}CONTROLS:${nc}"
     Write-Host ""
@@ -75,15 +79,12 @@ function Build-AnalyzeTool {
     $srcPath = Join-Path $script:WINMOLE_CMD "analyze"
     $binaryPath = Get-GoBinaryPath
     
-    Write-Info "Building disk analyzer..."
+    [Console]::Error.WriteLine('Building disk analyzer...')
     
     # Check if Go is installed
     $goCmd = Get-Command "go" -ErrorAction SilentlyContinue
     if (-not $goCmd) {
-        Write-Host "  ERROR: Go is not installed or not in PATH" -ForegroundColor Red
-        Write-Host ""
-        Write-Host "  Install Go from: https://go.dev/dl/"
-        Write-Host ""
+        [Console]::Error.WriteLine('Go is not installed or not in PATH. Install Go from: https://go.dev/dl/')
         return $false
     }
     
@@ -93,7 +94,7 @@ function Build-AnalyzeTool {
         
         # Download dependencies if needed
         if (-not (Test-Path (Join-Path $script:WINMOLE_ROOT "go.sum"))) {
-            Write-Info "Downloading dependencies..."
+            [Console]::Error.WriteLine('Downloading dependencies...')
             & go mod tidy 2>&1 | Out-Null
         }
         
@@ -102,16 +103,16 @@ function Build-AnalyzeTool {
         $buildOutput = & go build -ldflags="-s -w" -o $binaryPath . 2>&1
         
         if ($LASTEXITCODE -ne 0) {
-            Write-Host "  ERROR: Build failed: $buildOutput" -ForegroundColor Red
+            [Console]::Error.WriteLine("Build failed: $buildOutput")
             return $false
         }
         
-        Write-Success "Build complete"
+        [Console]::Error.WriteLine('Build complete')
         return $true
     }
     catch {
         $errMsg = $_.Exception.Message
-        Write-Host "  ERROR: Build failed: $errMsg" -ForegroundColor Red
+        [Console]::Error.WriteLine("Build failed: $errMsg")
         return $false
     }
     finally {
@@ -125,29 +126,36 @@ function Invoke-AnalyzeTool {
     $binaryPath = Get-GoBinaryPath
     
     # Build if binary doesn't exist or source is newer
-    $srcPath = Join-Path $script:WINMOLE_CMD "analyze\main.go"
+    $srcPath = Join-Path $script:WINMOLE_CMD 'analyze'
     $needsBuild = $false
     
     if (-not (Test-Path $binaryPath)) {
         $needsBuild = $true
     }
-    elseif ((Get-Item $srcPath).LastWriteTime -gt (Get-Item $binaryPath).LastWriteTime) {
-        $needsBuild = $true
+    elseif (Test-Path -LiteralPath $srcPath) {
+        $binaryTime = (Get-Item -LiteralPath $binaryPath).LastWriteTime
+        $needsBuild = @(Get-ChildItem -LiteralPath $srcPath -Filter '*.go' -File |
+            Where-Object { $_.LastWriteTime -gt $binaryTime }).Count -gt 0
     }
     
     if ($needsBuild) {
         if (-not (Build-AnalyzeTool)) {
+            if ($Json) { throw 'Could not build the disk analyzer.' }
             return
         }
     }
     
     # Run the analyzer
     $analyzeArgs = @()
+    if ($Json) { $analyzeArgs += '-json' }
     if ($TargetPath) {
-        $analyzeArgs += $TargetPath
+        $analyzeArgs += @('-path', $TargetPath)
     }
     
     & $binaryPath @analyzeArgs
+    if ($Json -and $LASTEXITCODE -ne 0) {
+        throw "Disk analyzer failed with exit code $LASTEXITCODE."
+    }
 }
 
 # ============================================================================
@@ -156,7 +164,7 @@ function Invoke-AnalyzeTool {
 
 function Main {
     # Initialize
-    Initialize-WinMole
+    if (-not $Json) { Initialize-WinMole }
     
     if ($Help) {
         Show-AnalyzeHelp
@@ -171,7 +179,10 @@ function Main {
     }
     
     # Validate path
-    if (-not (Test-Path $targetPath)) {
+    if ($Json -and -not (Test-Path -LiteralPath $targetPath -PathType Container)) {
+        throw "Not an existing directory: $targetPath"
+    }
+    if (-not (Test-Path -LiteralPath $targetPath)) {
         Write-Host "  ERROR: Path does not exist: $targetPath" -ForegroundColor Red
         return
     }
@@ -185,6 +196,7 @@ try {
     Main
 }
 catch {
+    if ($Json) { throw }
     Write-Host ""
     $errMsg = $_.Exception.Message
     Write-Host "  ERROR: An error occurred: $errMsg" -ForegroundColor Red
