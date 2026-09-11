@@ -169,9 +169,37 @@ function Write-WinMoleError { param($Message) Write-Host $Message }
         }
 
         It 'rejects nonzero builds even when diagnostics are on stderr' {
-            Set-Content -LiteralPath $script:GoExe -Value "@echo off`r`necho fixture compilation failed 1>&2`r`nexit /b 7"
+            Set-Content -LiteralPath $script:GoExe -Value @'
+@echo off
+if "%1"=="build" (
+    echo fixture compilation failed 1>&2
+    exit /b 7
+)
+exit /b 0
+'@
             Build-AllGo | Should -BeFalse
             $LASTEXITCODE | Should -Be 7
+            (Get-Location).Path | Should -Be $script:OriginalLocation
+            $ErrorActionPreference | Should -Be 'Stop'
+        }
+
+        It 'stops after failed mod <Stage> even if builds would succeed' -ForEach @(
+            @{ Stage = 'tidy' }, @{ Stage = 'download' }
+        ) {
+            $nativeFixture = @'
+@echo off
+if "%1 %2"=="mod FAILSTAGE" (
+    echo fixture dependency setup failed 1>&2
+    exit /b 7
+)
+if "%1"=="build" echo fixture>"%~4"
+exit /b 0
+'@
+            Set-Content -LiteralPath $script:GoExe -Value $nativeFixture.Replace('FAILSTAGE', $Stage)
+            Build-AllGo | Should -BeFalse
+            $LASTEXITCODE | Should -Be 7
+            Test-Path -LiteralPath (Join-Path $script:BIN_DIR 'analyze.exe') | Should -BeFalse
+            Test-Path -LiteralPath (Join-Path $script:BIN_DIR 'status.exe') | Should -BeFalse
             (Get-Location).Path | Should -Be $script:OriginalLocation
             $ErrorActionPreference | Should -Be 'Stop'
         }
