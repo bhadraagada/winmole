@@ -39,18 +39,18 @@ function Show-StatusHelp {
     Write-Host ""
     Write-Host "  ${green}DISPLAYS:${nc}"
     Write-Host ""
-    Write-Host "    ${cyan}CPU${nc}        Usage per core with graph"
+    Write-Host "    ${cyan}CPU${nc}        Total usage with graph and core count"
     Write-Host "    ${cyan}Memory${nc}     RAM usage and availability"
     Write-Host "    ${cyan}Disk${nc}       Drive usage and free space"
     Write-Host "    ${cyan}Network${nc}    Bytes sent/received per interface"
-    Write-Host "    ${cyan}Processes${nc}  Top processes by CPU/memory"
+    Write-Host "    ${cyan}Processes${nc}  Top five by CPU or memory usage"
     Write-Host ""
     Write-Host "  ${green}CONTROLS:${nc}"
     Write-Host ""
-    Write-Host "    ${cyan}Tab${nc}        Cycle through panels"
-    Write-Host "    ${cyan}1-4${nc}        Jump to panel (CPU/Mem/Disk/Net)"
+    Write-Host "    ${cyan}m${nc}          Toggle process sorting: CPU/memory"
+    Write-Host "    ${cyan}c${nc}          Toggle WinMole animation"
     Write-Host "    ${cyan}r${nc}          Refresh now"
-    Write-Host "    ${cyan}q/Esc${nc}      Quit"
+    Write-Host "    ${cyan}q/Ctrl+C${nc}   Quit"
     Write-Host ""
     Write-Host "  ${green}EXAMPLES:${nc}"
     Write-Host ""
@@ -84,19 +84,19 @@ function Build-StatusTool {
         return $false
     }
     
-    # Build the binary
+    # Keep native stderr separate: PowerShell 5.1 treats merged progress messages as errors.
     try {
         Push-Location $srcPath
         
         # Download dependencies if needed
         if (-not (Test-Path (Join-Path $script:WINMOLE_ROOT "go.sum"))) {
             Write-Info "Downloading dependencies..."
-            & go mod tidy 2>&1 | Out-Null
+            & go mod tidy | Out-Null
         }
         
         # Build
         $env:CGO_ENABLED = "0"
-        $buildOutput = & go build -ldflags="-s -w" -o $binaryPath . 2>&1
+        $buildOutput = & go build -ldflags="-s -w" -o $binaryPath .
         
         if ($LASTEXITCODE -ne 0) {
             Write-WinMoleError "Build failed: $buildOutput"
@@ -131,7 +131,7 @@ function Invoke-StatusTool {
     
     if ($needsBuild) {
         if (-not (Build-StatusTool)) {
-            return
+            throw 'Unable to build system monitor.'
         }
     }
     

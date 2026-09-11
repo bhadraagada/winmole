@@ -68,7 +68,7 @@ type MetricsSnapshot struct {
 	Networks []NetworkInfo
 
 	// Processes
-	TopProcesses []ProcessInfo
+	Processes []ProcessInfo
 }
 
 type DiskInfo struct {
@@ -260,18 +260,8 @@ func (c *Collector) Collect() MetricsSnapshot {
 			}
 		}
 
-		// Sort by CPU usage using sort.Slice
-		sort.Slice(procInfos, func(i, j int) bool {
-			return procInfos[i].CPU > procInfos[j].CPU
-		})
-
-		// Take top 5
-		if len(procInfos) > 5 {
-			procInfos = procInfos[:5]
-		}
-
 		mu.Lock()
-		snapshot.TopProcesses = procInfos
+		snapshot.Processes = procInfos
 		mu.Unlock()
 	}()
 
@@ -305,17 +295,19 @@ func calculateHealthScore(s MetricsSnapshot) (int, string) {
 		issues = append(issues, "Elevated Memory")
 	}
 
-	// Disk penalty (20% weight)
+	// Apply one disk penalty, based on the fullest drive.
+	var fullest DiskInfo
 	for _, d := range s.Disks {
-		if d.UsedPercent > 95 {
-			score -= 20
-			issues = append(issues, fmt.Sprintf("Disk %s Critical", d.Device))
-			break
-		} else if d.UsedPercent > 85 {
-			score -= 10
-			issues = append(issues, fmt.Sprintf("Disk %s Low", d.Device))
-			break
+		if d.UsedPercent > fullest.UsedPercent || (d.UsedPercent == fullest.UsedPercent && d.Device < fullest.Device) {
+			fullest = d
 		}
+	}
+	if fullest.UsedPercent > 95 {
+		score -= 20
+		issues = append(issues, fmt.Sprintf("Disk %s Critical", fullest.Device))
+	} else if fullest.UsedPercent > 85 {
+		score -= 10
+		issues = append(issues, fmt.Sprintf("Disk %s Low", fullest.Device))
 	}
 
 	// Swap penalty (10% weight)
@@ -346,14 +338,15 @@ func calculateHealthScore(s MetricsSnapshot) (int, string) {
 
 // Model for Bubble Tea
 type model struct {
-	collector  *Collector
-	metrics    MetricsSnapshot
-	animFrame  int
-	catHidden  bool
-	ready      bool
-	collecting bool
-	width      int
-	height     int
+	collector    *Collector
+	metrics      MetricsSnapshot
+	animFrame    int
+	catHidden    bool
+	sortByMemory bool
+	ready        bool
+	collecting   bool
+	width        int
+	height       int
 }
 
 // Messages
@@ -394,6 +387,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "c":
 			m.catHidden = !m.catHidden
+		case "m":
+			m.sortByMemory = !m.sortByMemory
+			sortProcesses(m.metrics.Processes, m.sortByMemory)
 		case "r":
 			m.collecting = true
 			return m, m.collectMetrics()
@@ -412,6 +408,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tickCmd()
 	case metricsMsg:
 		m.metrics = MetricsSnapshot(msg)
+		sortProcesses(m.metrics.Processes, m.sortByMemory)
 		m.ready = true
 		m.collecting = false
 	}
@@ -503,10 +500,17 @@ func (m model) View() string {
 	b.WriteString("\n")
 
 	// Top Processes
-	if len(m.metrics.TopProcesses) > 0 {
-		b.WriteString(headerStyle.Render("  📊 Top Processes"))
+	if len(m.metrics.Processes) > 0 {
+		order := "CPU"
+		if m.sortByMemory {
+			order = "Memory"
+		}
+		b.WriteString(headerStyle.Render("  📊 Top Processes by " + order))
 		b.WriteString("\n")
-		for _, p := range m.metrics.TopProcesses {
+		for i, p := range m.metrics.Processes {
+			if i >= 5 {
+				break
+			}
 			b.WriteString(fmt.Sprintf("  %s %s (CPU: %.1f%%, Mem: %.1f%%)\n",
 				dimStyle.Render(fmt.Sprintf("[%d]", p.PID)),
 				valueStyle.Render(truncateString(p.Name, 20)),
@@ -535,10 +539,23 @@ func (m model) View() string {
 	}
 
 	// Footer
-	b.WriteString(dimStyle.Render("  [q] quit  [r] refresh  [c] toggle winmole"))
+	b.WriteString(dimStyle.Render("  [q] quit  [r] refresh  [m] CPU/memory sort  [c] toggle winmole"))
 	b.WriteString("\n")
 
 	return b.String()
+}
+
+func sortProcesses(processes []ProcessInfo, byMemory bool) {
+	sort.Slice(processes, func(i, j int) bool {
+		if byMemory {
+			if processes[i].Memory != processes[j].Memory {
+				return processes[i].Memory > processes[j].Memory
+			}
+		} else if processes[i].CPU != processes[j].CPU {
+			return processes[i].CPU > processes[j].CPU
+		}
+		return processes[i].PID < processes[j].PID
+	})
 }
 
 func getWinMoleFrame(frame int, hidden bool) string {
