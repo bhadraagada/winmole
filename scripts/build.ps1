@@ -211,12 +211,14 @@ function Build-AllGo {
         # Always run mod tidy first to ensure go.sum exists
         $tidyOutput = & $script:GoExe mod tidy
         if ($LASTEXITCODE -ne 0) {
-            Write-Warn "go mod tidy warning: $tidyOutput"
+            Write-Fail "go mod tidy failed: $tidyOutput"
+            return $false
         }
         
         $dlOutput = & $script:GoExe mod download
         if ($LASTEXITCODE -ne 0) {
-            Write-Warn "go mod download warning: $dlOutput"
+            Write-Fail "go mod download failed: $dlOutput"
+            return $false
         }
     }
     finally {
