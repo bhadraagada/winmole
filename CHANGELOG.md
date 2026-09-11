@@ -5,6 +5,21 @@ All notable changes to WinMole are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Press `m` in the status dashboard to switch the top five processes between
+  CPU and memory usage, including memory-heavy processes outside the CPU top five.
+
+### Fixed
+
+- Disk health now uses the fullest drive, so an earlier low-space warning cannot
+  hide a critically full secondary drive. Existing thresholds and penalties remain.
+- First-time analyzer, status, and script builds now tolerate Go download progress
+  on stderr in Windows PowerShell 5.1. Build failures still show diagnostics, and
+  analyzer and status commands exit with failure when compilation fails.
+
 ## [0.1.1] - 2026-07-31
 
 ### Fixed

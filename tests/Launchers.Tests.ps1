@@ -34,7 +34,7 @@ Describe 'Bundled <Tool> launcher' -ForEach @(
 
     It 'still builds when the binary is missing' {
         Mock Get-GoBinaryPath { Join-Path $TestDrive 'missing.exe' }
-        & "Invoke-$Tool`Tool"
+        { & "Invoke-$Tool`Tool" } | Should -Throw '*Unable to build*'
         Should -Invoke "Build-$Tool`Tool" -Times 1 -Exactly
     }
 
@@ -43,7 +43,7 @@ Describe 'Bundled <Tool> launcher' -ForEach @(
         New-Item -ItemType Directory -Path (Split-Path -Parent $source) -Force | Out-Null
         Set-Content -LiteralPath $source -Value '// test source'
         (Get-Item -LiteralPath $script:launcherStub).LastWriteTime = (Get-Date).AddMinutes(-1)
-        & "Invoke-$Tool`Tool"
+        { & "Invoke-$Tool`Tool" } | Should -Throw '*Unable to build*'
         Should -Invoke "Build-$Tool`Tool" -Times 1 -Exactly
     }
 }

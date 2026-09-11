@@ -122,6 +122,9 @@ C:      █████████████░░░░░░  67.2%       D
 Free    156.3 GB / 476.9 GB              Up      ▮▯▯▯▯  0.8 MB/s
 ```
 
+Press `m` in the status dashboard to switch the top five processes between CPU
+and memory usage. CPU is the default; the process heading shows the active sort.
+
 ### Developer Artifact Purge
 
 ```powershell
