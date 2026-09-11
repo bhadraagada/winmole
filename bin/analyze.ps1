@@ -95,6 +95,10 @@ function Build-AnalyzeTool {
         if (-not (Test-Path (Join-Path $script:WINMOLE_ROOT "go.sum"))) {
             Write-Info "Downloading dependencies..."
             & go mod tidy | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host '  ERROR: Dependency setup failed.' -ForegroundColor Red
+                return $false
+            }
         }
         
         # Build
