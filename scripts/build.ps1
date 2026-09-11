@@ -173,7 +173,8 @@ function Build-GoTool {
             Write-Host "    $script:GoExe $($buildArgs -join ' ')"
         }
         
-        $output = & $script:GoExe @buildArgs 2>&1
+        # Go progress belongs on stderr; merging it throws under PowerShell 5.1 Stop mode.
+        $output = & $script:GoExe @buildArgs
         
         if ($LASTEXITCODE -ne 0) {
             Write-Fail "Build failed for $Name"
@@ -208,14 +209,16 @@ function Build-AllGo {
     Push-Location $script:ROOT
     try {
         # Always run mod tidy first to ensure go.sum exists
-        $tidyOutput = & $script:GoExe mod tidy 2>&1
+        $tidyOutput = & $script:GoExe mod tidy
         if ($LASTEXITCODE -ne 0) {
-            Write-Warn "go mod tidy warning: $tidyOutput"
+            Write-Fail "go mod tidy failed: $tidyOutput"
+            return $false
         }
         
-        $dlOutput = & $script:GoExe mod download 2>&1
+        $dlOutput = & $script:GoExe mod download
         if ($LASTEXITCODE -ne 0) {
-            Write-Warn "go mod download warning: $dlOutput"
+            Write-Fail "go mod download failed: $dlOutput"
+            return $false
         }
     }
     finally {
