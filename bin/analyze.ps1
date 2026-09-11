@@ -135,7 +135,8 @@ function Invoke-AnalyzeTool {
     if (-not (Test-Path $binaryPath)) {
         $needsBuild = $true
     }
-    elseif ((Get-Item $srcPath).LastWriteTime -gt (Get-Item $binaryPath).LastWriteTime) {
+    elseif ((Test-Path -LiteralPath $srcPath) -and
+        (Get-Item -LiteralPath $srcPath).LastWriteTime -gt (Get-Item -LiteralPath $binaryPath).LastWriteTime) {
         $needsBuild = $true
     }
     

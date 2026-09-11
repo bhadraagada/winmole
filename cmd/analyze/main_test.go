@@ -6,7 +6,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 // writeFile creates a file of exactly size bytes, making parents as needed.
@@ -148,5 +151,45 @@ func TestIsProtectedPathStillGuardsSystemDirs(t *testing.T) {
 	unprotected := filepath.Join(t.TempDir(), "project", "build")
 	if isProtectedPath(unprotected) {
 		t.Errorf("isProtectedPath(%q) = true, want false", unprotected)
+	}
+}
+
+func TestDeleteCommandsRespectDryRun(t *testing.T) {
+	root := t.TempDir()
+	file := filepath.Join(root, "ordinary.txt")
+	directory := filepath.Join(root, "project")
+	child := filepath.Join(directory, "nested", "keep.txt")
+	writeFile(t, file, 32)
+	writeFile(t, child, 64)
+	m := newModel(root)
+	m.scanning = false
+
+	// Create commands before enabling preview to cover delayed confirmation.
+	single := m.deletePath(directory)
+	batch := m.deletePaths([]string{file, directory})
+	t.Setenv("WINMOLE_DRY_RUN", "1")
+	for _, command := range []struct {
+		name string
+		run  tea.Cmd
+	}{
+		{"single", single},
+		{"batch", batch},
+	} {
+		t.Run(command.name, func(t *testing.T) {
+			result := command.run().(deleteCompleteMsg)
+			if result.err == nil || !strings.Contains(result.err.Error(), "WINMOLE_DRY_RUN=1") {
+				t.Fatalf("expected an explicit dry-run refusal, got %v", result.err)
+			}
+			updated, next := m.Update(result)
+			if next != nil || updated.(model).scanning {
+				t.Fatal("dry-run refusal was treated as a successful deletion")
+			}
+			for path, size := range map[string]int{file: 32, child: 64} {
+				content, err := os.ReadFile(path)
+				if err != nil || len(content) != size {
+					t.Fatalf("dry-run changed %s: %v", path, err)
+				}
+			}
+		})
 	}
 }

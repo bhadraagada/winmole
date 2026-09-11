@@ -42,7 +42,7 @@ function Show-StatusHelp {
     Write-Host "    ${cyan}CPU${nc}        Total usage with graph and core count"
     Write-Host "    ${cyan}Memory${nc}     RAM usage and availability"
     Write-Host "    ${cyan}Disk${nc}       Drive usage and free space"
-    Write-Host "    ${cyan}Network${nc}    Bytes sent/received per interface"
+    Write-Host "    ${cyan}Network${nc}    Upload/download rates per interface (bytes/sec)"
     Write-Host "    ${cyan}Processes${nc}  Top five by CPU or memory usage"
     Write-Host ""
     Write-Host "  ${green}CONTROLS:${nc}"
@@ -129,7 +129,8 @@ function Invoke-StatusTool {
     if (-not (Test-Path $binaryPath)) {
         $needsBuild = $true
     }
-    elseif ((Get-Item $srcPath).LastWriteTime -gt (Get-Item $binaryPath).LastWriteTime) {
+    elseif ((Test-Path -LiteralPath $srcPath) -and
+        (Get-Item -LiteralPath $srcPath).LastWriteTime -gt (Get-Item -LiteralPath $binaryPath).LastWriteTime) {
         $needsBuild = $true
     }
     

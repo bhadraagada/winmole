@@ -103,6 +103,10 @@ Analyze Disk  C:\Users  |  Total: 89.2 GB
 
 ### Live System Status
 
+The network panel shows upload and download rates per interface in bytes per
+second. Rates start at zero until two samples are available and reset safely
+when an interface reconnects or its counters restart.
+
 ```powershell
 .\winmole.ps1 status
 

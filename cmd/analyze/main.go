@@ -553,9 +553,20 @@ func (m model) scanPath(path string) tea.Cmd {
 	}
 }
 
+// checkDeletionMode runs when the command executes, including after confirmation.
+func checkDeletionMode() error {
+	if os.Getenv("WINMOLE_DRY_RUN") == "1" {
+		return fmt.Errorf("deletion disabled while WINMOLE_DRY_RUN=1; no files were deleted")
+	}
+	return nil
+}
+
 // deletePath deletes a file or directory with protection checks
 func (m model) deletePath(path string) tea.Cmd {
 	return func() tea.Msg {
+		if err := checkDeletionMode(); err != nil {
+			return deleteCompleteMsg{path: path, err: err}
+		}
 		// Safety check: never delete protected paths
 		if isProtectedPath(path) {
 			return deleteCompleteMsg{
@@ -572,6 +583,9 @@ func (m model) deletePath(path string) tea.Cmd {
 // deletePaths deletes multiple files or directories with protection checks
 func (m model) deletePaths(paths []string) tea.Cmd {
 	return func() tea.Msg {
+		if err := checkDeletionMode(); err != nil {
+			return deleteCompleteMsg{path: fmt.Sprintf("%d items", len(paths)), err: err}
+		}
 		var errors []string
 		for _, path := range paths {
 			// Safety check: never delete protected paths
