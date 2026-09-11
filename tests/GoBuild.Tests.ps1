@@ -75,6 +75,7 @@ exit /b 0
         }
 
         It 'rejects a nonzero build and prevents the launcher from reporting success' {
+            Set-Content -LiteralPath (Join-Path $script:Fixture 'go.sum') -Value ''
             Set-Content -LiteralPath $script:GoExe -Value "@echo off`r`necho fixture compilation failed 1>&2`r`nexit /b 7"
             & "Build-$($Name)Tool" | Should -BeFalse
             $LASTEXITCODE | Should -Be 7
@@ -83,7 +84,24 @@ exit /b 0
             $ErrorActionPreference | Should -Be 'Stop'
         }
 
+        It 'stops on failed dependency setup even if a subsequent build would succeed' {
+            Set-Content -LiteralPath $script:GoExe -Value @'
+@echo off
+if "%1"=="mod" (
+    echo fixture dependency setup failed 1>&2
+    exit /b 7
+)
+if "%1"=="build" echo fixture>"%~4"
+exit /b 0
+'@
+            & "Build-$($Name)Tool" | Should -BeFalse
+            $LASTEXITCODE | Should -Be 7
+            Test-Path -LiteralPath (Get-GoBinaryPath) | Should -BeFalse
+            (Get-Location).Path | Should -Be $script:OriginalLocation
+        }
+
         It 'exits nonzero and preserves native diagnostics through the command entry point' {
+            Set-Content -LiteralPath (Join-Path $script:Fixture 'go.sum') -Value ''
             Set-Content -LiteralPath $script:GoExe -Value "@echo off`r`necho fixture compilation failed 1>&2`r`nexit /b 7"
             $core = New-Item -ItemType Directory -Path (Join-Path $script:Fixture 'lib\core')
             Set-Content -LiteralPath (Join-Path $core.FullName 'common.ps1') -Value @'
