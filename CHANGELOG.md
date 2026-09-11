@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Future releases include a `SHA256SUMS` file for the ZIP archives. (#29)
+- Press `m` in the status dashboard to switch the top five processes between
+  CPU and memory usage, including memory-heavy processes outside the CPU top five.
 
 ### Fixed
 
@@ -17,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   internal return values during a dry run. (#39)
 - The installer refuses to overwrite or uninstall an unrecognized directory and
   routes uninstall deletion through the shared path protections.
+- Disk health now uses the fullest drive, so an earlier low-space warning cannot
+  hide a critically full secondary drive. Existing thresholds and penalties remain.
+- First-time analyzer, status, and script builds now tolerate Go download progress
+  on stderr in Windows PowerShell 5.1. Build failures still show diagnostics, and
+  analyzer and status commands exit with failure when compilation fails.
 
 ## [0.1.1] - 2026-07-31
 
