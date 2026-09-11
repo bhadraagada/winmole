@@ -69,6 +69,11 @@ Describe "Core Module - base.ps1" {
             Test-ProtectedPath "C:\Program Files (x86)" | Should -Be $true
         }
 
+        It "protects filesystem and user profile roots" {
+            Test-ProtectedPath ([System.IO.Path]::GetPathRoot($script:TEST_TEMP)) | Should -Be $true
+            Test-ProtectedPath $env:USERPROFILE | Should -Be $true
+        }
+
         It "allows temp directories" {
             Test-ProtectedPath $env:TEMP | Should -Be $false
         }
