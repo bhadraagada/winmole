@@ -5,6 +5,14 @@ All notable changes to WinMole are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- First-time analyzer, status, and script builds now tolerate Go download progress
+  on stderr in Windows PowerShell 5.1. Build failures still show diagnostics, and
+  analyzer and status commands exit with failure when compilation fails.
+
 ## [0.1.1] - 2026-07-31
 
 ### Fixed

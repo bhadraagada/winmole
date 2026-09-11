@@ -87,19 +87,19 @@ function Build-AnalyzeTool {
         return $false
     }
     
-    # Build the binary
+    # Keep native stderr separate: PowerShell 5.1 treats merged progress messages as errors.
     try {
         Push-Location $srcPath
         
         # Download dependencies if needed
         if (-not (Test-Path (Join-Path $script:WINMOLE_ROOT "go.sum"))) {
             Write-Info "Downloading dependencies..."
-            & go mod tidy 2>&1 | Out-Null
+            & go mod tidy | Out-Null
         }
         
         # Build
         $env:CGO_ENABLED = "0"
-        $buildOutput = & go build -ldflags="-s -w" -o $binaryPath . 2>&1
+        $buildOutput = & go build -ldflags="-s -w" -o $binaryPath .
         
         if ($LASTEXITCODE -ne 0) {
             Write-Host "  ERROR: Build failed: $buildOutput" -ForegroundColor Red
@@ -137,7 +137,7 @@ function Invoke-AnalyzeTool {
     
     if ($needsBuild) {
         if (-not (Build-AnalyzeTool)) {
-            return
+            throw 'Unable to build disk analyzer.'
         }
     }
     
