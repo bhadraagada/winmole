@@ -97,7 +97,7 @@ function Build-AnalyzeTool {
             [Console]::Error.WriteLine('Downloading dependencies...')
             & go mod tidy | Out-Null
             if ($LASTEXITCODE -ne 0) {
-                Write-Host '  ERROR: Dependency setup failed.' -ForegroundColor Red
+                [Console]::Error.WriteLine('Dependency setup failed.')
                 return $false
             }
         }
