@@ -101,6 +101,11 @@ Analyze Disk  C:\Users  |  Total: 89.2 GB
   ↑↓ Navigate  |  Enter Expand  |  Backspace Back  |  Q Quit
 ```
 
+Press `Backspace`, `Left`, or `h` to return to the previous directory. At the
+starting directory, the same keys scan its parent, so you can explore above the
+path you launched with. While a scan runs, wait for it to finish or press `q` or
+`Ctrl+C` to quit.
+
 ### Live System Status
 
 ```powershell

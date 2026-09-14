@@ -238,6 +238,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		return m, nil
 	case scanCompleteMsg:
+		m.err = nil
 		m.entries = msg.entries
 		m.largeFiles = msg.largeFiles
 		m.totalSize = msg.totalSize
@@ -258,6 +259,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case scanErrorMsg:
 		m.err = msg.err
 		m.scanning = false
+		m.entries = nil
+		m.largeFiles = nil
+		m.totalSize = 0
+		m.selected = 0
+		m.multiSelected = make(map[string]bool)
 		return m, nil
 	case deleteCompleteMsg:
 		m.deleteConfirm = false
@@ -276,6 +282,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Keep the displayed path and its entries together until the scan finishes.
+	if m.scanning {
+		if msg.String() == "q" || msg.String() == "ctrl+c" {
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+
 	// Handle delete confirmation
 	if m.deleteConfirm {
 		switch msg.String() {
@@ -330,6 +344,7 @@ func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 				// Check cache
 				if cached, ok := m.cache[entry.Path]; ok {
+					m.err = nil
 					m.entries = cached.Entries
 					m.largeFiles = cached.LargeFiles
 					m.totalSize = cached.TotalSize
@@ -342,6 +357,7 @@ func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "left", "h", "backspace":
 		if len(m.history) > 0 {
+			m.err = nil
 			last := m.history[len(m.history)-1]
 			m.history = m.history[:len(m.history)-1]
 			m.path = last.Path
@@ -351,6 +367,12 @@ func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.selected = last.Selected
 			m.multiSelected = make(map[string]bool)
 			m.scanning = false
+		} else if parent := filepath.Dir(m.path); parent != m.path {
+			m.path = parent
+			m.selected = 0
+			m.multiSelected = make(map[string]bool)
+			m.scanning = true
+			return m, m.scanPath(parent)
 		}
 	case "space":
 		if len(m.entries) > 0 {
@@ -395,7 +417,9 @@ func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "g":
 		m.selected = 0
 	case "G":
-		m.selected = len(m.entries) - 1
+		if len(m.entries) > 0 {
+			m.selected = len(m.entries) - 1
+		}
 	}
 	return m, nil
 }

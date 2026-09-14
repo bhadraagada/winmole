@@ -9,11 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Disk analyzer parent navigation now works above the starting directory with
+  `Backspace`, `Left`, or `h`, stopping at the filesystem root.
 - Press `m` in the status dashboard to switch the top five processes between
   CPU and memory usage, including memory-heavy processes outside the CPU top five.
 
 ### Fixed
 
+- Analyzer input during a scan can no longer replace a parent listing with a
+  late child result or act on entries hidden behind the scanning screen.
+- Failed analyzer scans clear the old listing instead of leaving it actionable
+  under the failed directory's heading.
+- Jumping to the last entry in an empty analyzer listing keeps a valid cursor,
+  and a successful refresh clears the previous scan error.
 - Disk health now uses the fullest drive, so an earlier low-space warning cannot
   hide a critically full secondary drive. Existing thresholds and penalties remain.
 - First-time analyzer, status, and script builds now tolerate Go download progress
