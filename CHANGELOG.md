@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Disk analyzer parent navigation now works above the starting directory with
   `Backspace`, `Left`, or `h`, stopping at the filesystem root.
+- The status dashboard now displays free space beside each drive's usage bar.
 - Press `m` in the status dashboard to switch the top five processes between
   CPU and memory usage, including memory-heavy processes outside the CPU top five.
 

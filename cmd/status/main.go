@@ -495,7 +495,11 @@ func (m model) View() string {
 			valueStyle.Render(formatBytes(d.Total)),
 			diskColor.Render(fmt.Sprintf("(%.1f%%)", d.UsedPercent)),
 		))
-		b.WriteString(fmt.Sprintf("  %s\n", renderProgressBar(d.UsedPercent, 30)))
+		b.WriteString(fmt.Sprintf("  %s  %s %s\n",
+			renderProgressBar(d.UsedPercent, 30),
+			labelStyle.Render("Free:"),
+			valueStyle.Render(formatBytes(d.Free)),
+		))
 	}
 	b.WriteString("\n")
 
