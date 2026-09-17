@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Status dashboard labels now fit their terminal display width without cutting
   Unicode characters, combining marks, or joined emoji in CPU, process, and
   network names.
+- Long paths in the analyzer's large-file list now preserve Unicode characters
+  and the filename suffix while fitting the available display width.
 - Disk health now uses the fullest drive, so an earlier low-space warning cannot
   hide a critically full secondary drive. Existing thresholds and penalties remain.
 - First-time analyzer, status, and script builds now tolerate Go download progress

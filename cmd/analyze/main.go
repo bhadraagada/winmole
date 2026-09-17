@@ -18,6 +18,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/rivo/uniseg"
 )
 
 // Scanning limits. These are runaway guards, not accuracy trade-offs: a
@@ -831,12 +832,26 @@ func formatBytes(bytes int64) string {
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
 
-// truncatePath truncates a path to fit in maxLen
+// truncatePath keeps the filename suffix within maxLen display cells without
+// splitting wide characters, combining marks, or joined emoji.
 func truncatePath(path string, maxLen int) string {
-	if len(path) <= maxLen {
+	if maxLen <= 0 {
+		return ""
+	}
+	width := uniseg.StringWidth(path)
+	if width <= maxLen {
 		return path
 	}
-	return "..." + path[len(path)-maxLen+3:]
+	if maxLen <= 3 {
+		return strings.Repeat(".", maxLen)
+	}
+	graphemes := uniseg.NewGraphemes(path)
+	start := 0
+	for width > maxLen-3 && graphemes.Next() {
+		width -= graphemes.Width()
+		_, start = graphemes.Positions()
+	}
+	return "..." + path[start:]
 }
 
 // openInExplorer opens a path in Windows Explorer
