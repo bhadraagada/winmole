@@ -106,6 +106,30 @@ starting directory, the same keys scan its parent, so you can explore above the
 path you launched with. While a scan runs, wait for it to finish or press `q` or
 `Ctrl+C` to quit.
 
+### Save a disk usage report
+
+```powershell
+# Read-only scan, with no interactive terminal or deletion commands
+.\winmole.ps1 analyze 'C:\Projects' -Json | Set-Content -Encoding UTF8 usage.json
+$report = Get-Content -Raw usage.json | ConvertFrom-Json
+$report.entries | Select-Object name, size_bytes, partial
+
+# Standalone binary: put flags before a positional path
+.\bin\analyze.exe -json -path 'C:\Projects'
+```
+
+The report contains `path`, `total_bytes`, `partial`, and `entries`. Each entry
+contains `name`, `path`, `size_bytes`, `is_directory`, and `partial`. Paths are
+absolute. Entries describe immediate children, with recursively measured sizes
+for directories, sorted by size descending and then name. Empty directories
+produce an empty `entries` array.
+
+When `partial` is true, the corresponding byte count is a lower bound because
+a scan timed out, hit its file limit, or could not read an entry. The report's
+`partial` flag is true if any entry is partial. Invalid or unreadable root
+directories return a nonzero exit code and an error on stderr. Reports use the
+same scan limits as the interactive analyzer.
+
 ### Live System Status
 
 ```powershell

@@ -669,6 +669,8 @@ func scanDirectory(path string) ([]dirEntry, []fileEntry, int64, error) {
 				if err == nil {
 					size = info.Size()
 					lastAccess = info.ModTime()
+				} else {
+					partial = true
 				}
 			}
 
@@ -864,8 +866,10 @@ func openInExplorer(path string) {
 
 func main() {
 	var startPath string
+	var jsonOutput bool
 
 	flag.StringVar(&startPath, "path", "", "Path to analyze")
+	flag.BoolVar(&jsonOutput, "json", false, "Print a read-only JSON disk usage report")
 	flag.Parse()
 
 	// Check environment variable
@@ -888,6 +892,14 @@ func main() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
+	}
+
+	if jsonOutput {
+		if err := writeJSONReport(os.Stdout, absPath); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		return
 	}
 
 	// Check if path exists
