@@ -33,8 +33,9 @@ Describe 'Analyzer JSON command' {
     }
 
     It 'routes -Json through a source-free package with clean stdout' {
-        & $shell -NoProfile -File "$package\winmole.ps1" analyze $fixture -Json > $stdout 2> $stderr
-        $LASTEXITCODE | Should -Be 0
+        $process = Start-Process -FilePath $shell -ArgumentList @('-NoProfile', '-File', "`"$package\winmole.ps1`"", 'analyze', "`"$fixture`"", '-Json') `
+            -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+        $process.ExitCode | Should -Be 0
         $report = Get-Content -LiteralPath $stdout -Raw | ConvertFrom-Json
         $report.path | Should -Be $fixture
         $report.total_bytes | Should -Be 5
@@ -46,8 +47,9 @@ Describe 'Analyzer JSON command' {
     }
 
     It 'returns nonzero and stderr for an invalid directory' {
-        & $shell -NoProfile -File "$package\winmole.ps1" analyze "$fixture\hello.txt" -Json > $stdout 2> $stderr
-        $LASTEXITCODE | Should -Not -Be 0
+        $process = Start-Process -FilePath $shell -ArgumentList @('-NoProfile', '-File', "`"$package\winmole.ps1`"", 'analyze', "`"$fixture\hello.txt`"", '-Json') `
+            -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+        $process.ExitCode | Should -Not -Be 0
         Get-Content -LiteralPath $stdout -Raw | Should -BeNullOrEmpty
         Get-Content -LiteralPath $stderr -Raw | Should -Match 'Not an existing directory'
     }
@@ -56,8 +58,9 @@ Describe 'Analyzer JSON command' {
         Copy-Item -LiteralPath "$root\cmd" -Destination $package -Recurse
         Copy-Item -LiteralPath "$root\go.mod", "$root\go.sum" -Destination $package
         (Get-Item -LiteralPath "$package\cmd\analyze\report.go").LastWriteTime = (Get-Date).AddMinutes(1)
-        & $shell -NoProfile -File "$package\winmole.ps1" analyze $fixture -Json > $stdout 2> $stderr
-        $LASTEXITCODE | Should -Be 0
+        $process = Start-Process -FilePath $shell -ArgumentList @('-NoProfile', '-File', "`"$package\winmole.ps1`"", 'analyze', "`"$fixture`"", '-Json') `
+            -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+        $process.ExitCode | Should -Be 0
         $report = Get-Content -LiteralPath $stdout -Raw | ConvertFrom-Json
         $report.total_bytes | Should -Be 5
         Get-Content -LiteralPath $stderr -Raw | Should -Match 'Build complete'
