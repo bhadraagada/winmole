@@ -490,6 +490,11 @@ func (m model) View() string {
 	b.WriteString("\n")
 	for _, d := range m.metrics.Disks {
 		diskColor := getPercentColor(d.UsedPercent)
+		freeSpace := formatBytes(d.Free)
+		barWidth := 30
+		if m.width > 0 {
+			barWidth = min(barWidth, max(0, m.width-ansi.StringWidth("    Free: "+freeSpace)))
+		}
 		b.WriteString(fmt.Sprintf("  %s %s / %s %s\n",
 			labelStyle.Render(d.Device),
 			diskColor.Render(formatBytes(d.Used)),
@@ -497,9 +502,9 @@ func (m model) View() string {
 			diskColor.Render(fmt.Sprintf("(%.1f%%)", d.UsedPercent)),
 		))
 		b.WriteString(fmt.Sprintf("  %s  %s %s\n",
-			renderProgressBar(d.UsedPercent, 30),
+			renderProgressBar(d.UsedPercent, barWidth),
 			labelStyle.Render("Free:"),
-			valueStyle.Render(formatBytes(d.Free)),
+			valueStyle.Render(freeSpace),
 		))
 	}
 	b.WriteString("\n")
