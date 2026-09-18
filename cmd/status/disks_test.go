@@ -5,7 +5,34 @@ package main
 import (
 	"strings"
 	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 )
+
+func TestDiskFreeSpaceFitsTerminalWidth(t *testing.T) {
+	m := newModel()
+	updated, _ := m.Update(metricsMsg(MetricsSnapshot{
+		Disks: []DiskInfo{{Device: "C:", Free: 20 * 1024 * 1024 * 1024, UsedPercent: 75}},
+	}))
+	m = updated.(model)
+	for _, width := range []int{80, 48, 40, 32, 18, 80} {
+		updated, _ = m.Update(tea.WindowSizeMsg{Width: width, Height: 24})
+		m = updated.(model)
+		rows := 0
+		for _, line := range strings.Split(m.View(), "\n") {
+			if strings.Contains(line, "Free:") {
+				rows++
+				if !strings.Contains(line, "Free: 20.0 GB") || ansi.StringWidth(line) > width {
+					t.Errorf("disk free-space row does not fit %d columns: %q", width, line)
+				}
+			}
+		}
+		if rows != 1 {
+			t.Fatalf("got %d free-space rows, want 1", rows)
+		}
+	}
+}
 
 func TestDiskFreeSpaceRenderingAndRefresh(t *testing.T) {
 	const gb = 1024 * 1024 * 1024
