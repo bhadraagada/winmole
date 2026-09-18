@@ -101,6 +101,11 @@ Analyze Disk  C:\Users  |  Total: 89.2 GB
   ↑↓ Navigate  |  Enter Expand  |  Backspace Back  |  Q Quit
 ```
 
+Press `Backspace`, `Left`, or `h` to return to the previous directory. At the
+starting directory, the same keys scan its parent, so you can explore above the
+path you launched with. While a scan runs, wait for it to finish or press `q` or
+`Ctrl+C` to quit.
+
 ### Live System Status
 
 ```powershell
@@ -120,6 +125,9 @@ Free    156.3 GB / 476.9 GB              Up      ▮▯▯▯▯  0.8 MB/s
 
 Press `m` in the status dashboard to switch the top five processes between CPU
 and memory usage. CPU is the default; the process heading shows the active sort.
+
+Each drive shows its used and total capacity, usage percentage, and free space
+beside the usage bar. Free space updates with each metrics refresh.
 
 ### Developer Artifact Purge
 

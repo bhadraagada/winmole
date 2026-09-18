@@ -14,6 +14,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/host"
@@ -489,13 +490,22 @@ func (m model) View() string {
 	b.WriteString("\n")
 	for _, d := range m.metrics.Disks {
 		diskColor := getPercentColor(d.UsedPercent)
+		freeSpace := formatBytes(d.Free)
+		barWidth := 30
+		if m.width > 0 {
+			barWidth = min(barWidth, max(0, m.width-ansi.StringWidth("    Free: "+freeSpace)))
+		}
 		b.WriteString(fmt.Sprintf("  %s %s / %s %s\n",
 			labelStyle.Render(d.Device),
 			diskColor.Render(formatBytes(d.Used)),
 			valueStyle.Render(formatBytes(d.Total)),
 			diskColor.Render(fmt.Sprintf("(%.1f%%)", d.UsedPercent)),
 		))
-		b.WriteString(fmt.Sprintf("  %s\n", renderProgressBar(d.UsedPercent, 30)))
+		b.WriteString(fmt.Sprintf("  %s  %s %s\n",
+			renderProgressBar(d.UsedPercent, barWidth),
+			labelStyle.Render("Free:"),
+			valueStyle.Render(freeSpace),
+		))
 	}
 	b.WriteString("\n")
 
@@ -628,10 +638,7 @@ func formatDuration(d time.Duration) string {
 }
 
 func truncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen-3] + "..."
+	return ansi.Truncate(s, maxLen, "...")
 }
 
 func main() {

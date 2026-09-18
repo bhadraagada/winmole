@@ -6,8 +6,58 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
+	"unicode/utf8"
+
+	"github.com/rivo/uniseg"
 )
+
+func TestTruncatePath(t *testing.T) {
+	for _, tt := range []struct {
+		name, path string
+		width      int
+		want       string
+	}{
+		{"empty", "", 8, ""},
+		{"negative", "abc", -1, ""},
+		{"zero", "abc", 0, ""},
+		{"one", "abcdef", 1, "."},
+		{"two", "abcdef", 2, ".."},
+		{"three", "abcdef", 3, "..."},
+		{"short", "ab", 3, "ab"},
+		{"ASCII", `C:\folder\file.bin`, 11, "...file.bin"},
+		{"CJK fits", "中文", 4, "中文"},
+		{"CJK suffix", "abcdef中文.txt", 11, "...中文.txt"},
+		{"wide boundary", "abc界x", 5, "...x"},
+		{"combining suffix", "abcdefe\u0301xy", 6, "...e\u0301xy"},
+		{"combining boundary", "abcdefe\u0301xy", 5, "...xy"},
+		{"emoji suffix", "abcdef👩‍💻xy", 7, "...👩‍💻xy"},
+		{"emoji boundary", "abcdef👩‍💻x", 5, "...x"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got := truncatePath(tt.path, tt.width)
+			if got != tt.want {
+				t.Errorf("truncatePath(%q, %d) = %q, want %q", tt.path, tt.width, got, tt.want)
+			}
+			if !utf8.ValidString(got) || uniseg.StringWidth(got) > max(tt.width, 0) {
+				t.Errorf("invalid UTF-8 or display width exceeded: %q", got)
+			}
+		})
+	}
+}
+
+func TestLargeFilesViewPreservesUnicodeSuffix(t *testing.T) {
+	m := newModel(`C:\fixture`)
+	m.scanning = false
+	m.showLargeFiles = true
+	m.largeFiles = []fileEntry{{Path: `C:\` + strings.Repeat("界", 40) + ".bin", Size: 128 * 1024 * 1024}}
+	view := m.View()
+	want := " ..." + strings.Repeat("界", 26) + ".bin\n"
+	if !utf8.ValidString(view) || !strings.Contains(view, want) {
+		t.Errorf("large-file view lost the 60-column Unicode suffix: %q", view)
+	}
+}
 
 // writeFile creates a file of exactly size bytes, making parents as needed.
 func writeFile(t *testing.T, path string, size int) {
