@@ -234,7 +234,12 @@ function Show-SystemInfo {
 
 function Main {
     # Initialize
-    Initialize-WinMole
+    if ($Command -eq 'analyze' -and @($CommandArgs) -match '^-{1,2}json$') {
+        Initialize-WinMole 6>$null
+    }
+    else {
+        Initialize-WinMole
+    }
 
     # Handle switches passed as strings (when called via batch file with quoted args)
     # e.g., winmole '-ShowHelp' becomes $Command = "-ShowHelp" instead of $ShowHelp = $true
@@ -314,9 +319,7 @@ try {
     Main
 }
 catch {
-    Write-Host ""
-    Write-WinMoleError "An error occurred: $_"
-    Write-Host ""
+    [Console]::Error.WriteLine("An error occurred: $_")
     exit 1
 }
 finally {
