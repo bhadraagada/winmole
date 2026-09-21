@@ -49,21 +49,25 @@ type MetricsSnapshot struct {
 	Uptime   time.Duration
 
 	// CPU
-	CPUModel   string
-	CPUCores   int
-	CPUPercent float64
-	CPUPerCore []float64
+	CPUAvailable bool
+	CPUModel     string
+	CPUCores     int
+	CPUPercent   float64
+	CPUPerCore   []float64
 
 	// Memory
-	MemTotal    uint64
-	MemUsed     uint64
-	MemPercent  float64
-	SwapTotal   uint64
-	SwapUsed    uint64
-	SwapPercent float64
+	MemAvailable  bool
+	SwapAvailable bool
+	MemTotal      uint64
+	MemUsed       uint64
+	MemPercent    float64
+	SwapTotal     uint64
+	SwapUsed      uint64
+	SwapPercent   float64
 
 	// Disk
-	Disks []DiskInfo
+	Disks         []DiskInfo
+	DisksComplete bool
 
 	// Network
 	Networks []NetworkInfo
@@ -73,6 +77,7 @@ type MetricsSnapshot struct {
 }
 
 type DiskInfo struct {
+	Available   bool
 	Device      string
 	Mountpoint  string
 	Total       uint64
@@ -99,14 +104,24 @@ type ProcessInfo struct {
 
 // Collector
 type Collector struct {
-	prevNet     map[string]net.IOCountersStat
-	prevNetTime time.Time
-	mu          sync.Mutex
+	prevNet       map[string]net.IOCountersStat
+	prevNetTime   time.Time
+	mu            sync.Mutex
+	cpuPercent    func(context.Context, time.Duration, bool) ([]float64, error)
+	virtualMemory func(context.Context) (*mem.VirtualMemoryStat, error)
+	swapMemory    func(context.Context) (*mem.SwapMemoryStat, error)
+	partitions    func(context.Context, bool) ([]disk.PartitionStat, error)
+	diskUsage     func(context.Context, string) (*disk.UsageStat, error)
 }
 
 func NewCollector() *Collector {
 	return &Collector{
-		prevNet: make(map[string]net.IOCountersStat),
+		prevNet:       make(map[string]net.IOCountersStat),
+		cpuPercent:    cpu.PercentWithContext,
+		virtualMemory: mem.VirtualMemoryWithContext,
+		swapMemory:    mem.SwapMemoryWithContext,
+		partitions:    disk.PartitionsWithContext,
+		diskUsage:     disk.UsageWithContext,
 	}
 }
 
@@ -121,6 +136,7 @@ func (c *Collector) Collect() MetricsSnapshot {
 	)
 
 	snapshot.CollectedAt = time.Now()
+	snapshot.CPUCores = runtime.NumCPU()
 
 	// Host info
 	wg.Add(1)
@@ -143,15 +159,15 @@ func (c *Collector) Collect() MetricsSnapshot {
 		if cpuInfo, err := cpu.InfoWithContext(ctx); err == nil && len(cpuInfo) > 0 {
 			mu.Lock()
 			snapshot.CPUModel = cpuInfo[0].ModelName
-			snapshot.CPUCores = runtime.NumCPU()
 			mu.Unlock()
 		}
-		if percent, err := cpu.PercentWithContext(ctx, 500*time.Millisecond, false); err == nil && len(percent) > 0 {
+		if percent, err := c.cpuPercent(ctx, 500*time.Millisecond, false); err == nil && len(percent) > 0 {
 			mu.Lock()
+			snapshot.CPUAvailable = true
 			snapshot.CPUPercent = percent[0]
 			mu.Unlock()
 		}
-		if perCore, err := cpu.PercentWithContext(ctx, 500*time.Millisecond, true); err == nil {
+		if perCore, err := c.cpuPercent(ctx, 500*time.Millisecond, true); err == nil {
 			mu.Lock()
 			snapshot.CPUPerCore = perCore
 			mu.Unlock()
@@ -162,15 +178,17 @@ func (c *Collector) Collect() MetricsSnapshot {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if memInfo, err := mem.VirtualMemoryWithContext(ctx); err == nil {
+		if memInfo, err := c.virtualMemory(ctx); err == nil && memInfo != nil && memInfo.Total > 0 {
 			mu.Lock()
+			snapshot.MemAvailable = true
 			snapshot.MemTotal = memInfo.Total
 			snapshot.MemUsed = memInfo.Used
 			snapshot.MemPercent = memInfo.UsedPercent
 			mu.Unlock()
 		}
-		if swapInfo, err := mem.SwapMemoryWithContext(ctx); err == nil {
+		if swapInfo, err := c.swapMemory(ctx); err == nil && swapInfo != nil {
 			mu.Lock()
+			snapshot.SwapAvailable = true
 			snapshot.SwapTotal = swapInfo.Total
 			snapshot.SwapUsed = swapInfo.Used
 			snapshot.SwapPercent = swapInfo.UsedPercent
@@ -182,30 +200,34 @@ func (c *Collector) Collect() MetricsSnapshot {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if partitions, err := disk.PartitionsWithContext(ctx, false); err == nil {
-			var disks []DiskInfo
-			for _, p := range partitions {
-				// Include physical drives (drive letter format like "C:", "D:", etc.)
-				// Skip network drives and special mount points
-				if len(p.Device) >= 2 && p.Device[1] == ':' {
-					// It's a drive letter (A: through Z:)
-					if usage, err := disk.UsageWithContext(ctx, p.Mountpoint); err == nil {
-						disks = append(disks, DiskInfo{
-							Device:      p.Device,
-							Mountpoint:  p.Mountpoint,
-							Total:       usage.Total,
-							Used:        usage.Used,
-							Free:        usage.Free,
-							UsedPercent: usage.UsedPercent,
-							Fstype:      p.Fstype,
-						})
-					}
+		// Windows can return readable partitions alongside enumeration warnings.
+		partitions, err := c.partitions(ctx, false)
+		var disks []DiskInfo
+		for _, p := range partitions {
+			// Include physical drives (drive letter format like "C:", "D:", etc.)
+			// Skip network drives and special mount points
+			if len(p.Device) >= 2 && p.Device[1] == ':' {
+				// It's a drive letter (A: through Z:)
+				if usage, err := c.diskUsage(ctx, p.Mountpoint); err == nil && usage != nil && usage.Total > 0 {
+					disks = append(disks, DiskInfo{
+						Available:   true,
+						Device:      p.Device,
+						Mountpoint:  p.Mountpoint,
+						Total:       usage.Total,
+						Used:        usage.Used,
+						Free:        usage.Free,
+						UsedPercent: usage.UsedPercent,
+						Fstype:      p.Fstype,
+					})
+				} else {
+					disks = append(disks, DiskInfo{Device: p.Device, Mountpoint: p.Mountpoint, Fstype: p.Fstype})
 				}
 			}
-			mu.Lock()
-			snapshot.Disks = disks
-			mu.Unlock()
 		}
+		mu.Lock()
+		snapshot.Disks = disks
+		snapshot.DisksComplete = err == nil
+		mu.Unlock()
 	}()
 
 	// Network
@@ -275,23 +297,44 @@ func (c *Collector) Collect() MetricsSnapshot {
 }
 
 func calculateHealthScore(s MetricsSnapshot) (int, string) {
+	// Missing measurements cannot establish a healthy system.
+	var missing []string
+	if !s.CPUAvailable {
+		missing = append(missing, "CPU")
+	}
+	if !s.MemAvailable {
+		missing = append(missing, "Memory")
+	}
+	if !s.SwapAvailable {
+		missing = append(missing, "Swap")
+	}
+	if len(s.Disks) == 0 {
+		missing = append(missing, "Disks")
+	} else if !s.DisksComplete {
+		missing = append(missing, "Disks (incomplete list)")
+	}
+	for _, d := range s.Disks {
+		if !d.Available {
+			missing = append(missing, "Disk "+d.Device)
+		}
+	}
 	score := 100
 	var issues []string
 
 	// CPU penalty (30% weight)
-	if s.CPUPercent > 90 {
+	if s.CPUAvailable && s.CPUPercent > 90 {
 		score -= 30
 		issues = append(issues, "High CPU")
-	} else if s.CPUPercent > 70 {
+	} else if s.CPUAvailable && s.CPUPercent > 70 {
 		score -= 15
 		issues = append(issues, "Elevated CPU")
 	}
 
 	// Memory penalty (25% weight)
-	if s.MemPercent > 90 {
+	if s.MemAvailable && s.MemPercent > 90 {
 		score -= 25
 		issues = append(issues, "High Memory")
-	} else if s.MemPercent > 80 {
+	} else if s.MemAvailable && s.MemPercent > 80 {
 		score -= 12
 		issues = append(issues, "Elevated Memory")
 	}
@@ -299,6 +342,9 @@ func calculateHealthScore(s MetricsSnapshot) (int, string) {
 	// Apply one disk penalty, based on the fullest drive.
 	var fullest DiskInfo
 	for _, d := range s.Disks {
+		if !d.Available {
+			continue
+		}
 		if d.UsedPercent > fullest.UsedPercent || (d.UsedPercent == fullest.UsedPercent && d.Device < fullest.Device) {
 			fullest = d
 		}
@@ -312,13 +358,20 @@ func calculateHealthScore(s MetricsSnapshot) (int, string) {
 	}
 
 	// Swap penalty (10% weight)
-	if s.SwapPercent > 80 {
+	if s.SwapAvailable && s.SwapPercent > 80 {
 		score -= 10
 		issues = append(issues, "High Swap")
 	}
 
 	if score < 0 {
 		score = 0
+	}
+	if len(missing) > 0 {
+		message := "Missing metrics: " + strings.Join(missing, ", ")
+		if len(issues) > 0 {
+			message += "; " + strings.Join(issues, ", ")
+		}
+		return -1, message
 	}
 
 	msg := "Excellent"
@@ -434,13 +487,18 @@ func (m model) View() string {
 
 	// Health score
 	healthColor := okStyle
+	healthValue := fmt.Sprintf("%d%%", m.metrics.HealthScore)
 	if m.metrics.HealthScore < 50 {
 		healthColor = dangerStyle
 	} else if m.metrics.HealthScore < 70 {
 		healthColor = warnStyle
 	}
+	if m.metrics.HealthScore < 0 {
+		healthColor = warnStyle
+		healthValue = "Unavailable"
+	}
 	b.WriteString(fmt.Sprintf("  Health: %s  %s\n\n",
-		healthColor.Render(fmt.Sprintf("%d%%", m.metrics.HealthScore)),
+		healthColor.Render(healthValue),
 		dimStyle.Render(m.metrics.HealthMessage),
 	))
 
@@ -457,26 +515,36 @@ func (m model) View() string {
 	b.WriteString("\n")
 	cpuColor := getPercentColor(m.metrics.CPUPercent)
 	b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("Model:"), valueStyle.Render(truncateString(m.metrics.CPUModel, 50))))
-	b.WriteString(fmt.Sprintf("  %s %s (%d cores)\n",
-		labelStyle.Render("Usage:"),
-		cpuColor.Render(fmt.Sprintf("%.1f%%", m.metrics.CPUPercent)),
-		m.metrics.CPUCores,
-	))
-	b.WriteString(fmt.Sprintf("  %s\n", renderProgressBar(m.metrics.CPUPercent, 30)))
+	if m.metrics.CPUAvailable {
+		b.WriteString(fmt.Sprintf("  %s %s (%d cores)\n",
+			labelStyle.Render("Usage:"),
+			cpuColor.Render(fmt.Sprintf("%.1f%%", m.metrics.CPUPercent)),
+			m.metrics.CPUCores,
+		))
+		b.WriteString(fmt.Sprintf("  %s\n", renderProgressBar(m.metrics.CPUPercent, 30)))
+	} else {
+		b.WriteString("  Usage: Unavailable\n")
+	}
 	b.WriteString("\n")
 
 	// Memory
 	b.WriteString(headerStyle.Render("  🧠 Memory"))
 	b.WriteString("\n")
 	memColor := getPercentColor(m.metrics.MemPercent)
-	b.WriteString(fmt.Sprintf("  %s %s / %s %s\n",
-		labelStyle.Render("RAM:"),
-		memColor.Render(formatBytes(m.metrics.MemUsed)),
-		valueStyle.Render(formatBytes(m.metrics.MemTotal)),
-		memColor.Render(fmt.Sprintf("(%.1f%%)", m.metrics.MemPercent)),
-	))
-	b.WriteString(fmt.Sprintf("  %s\n", renderProgressBar(m.metrics.MemPercent, 30)))
-	if m.metrics.SwapTotal > 0 {
+	if m.metrics.MemAvailable {
+		b.WriteString(fmt.Sprintf("  %s %s / %s %s\n",
+			labelStyle.Render("RAM:"),
+			memColor.Render(formatBytes(m.metrics.MemUsed)),
+			valueStyle.Render(formatBytes(m.metrics.MemTotal)),
+			memColor.Render(fmt.Sprintf("(%.1f%%)", m.metrics.MemPercent)),
+		))
+		b.WriteString(fmt.Sprintf("  %s\n", renderProgressBar(m.metrics.MemPercent, 30)))
+	} else {
+		b.WriteString("  RAM: Unavailable\n")
+	}
+	if !m.metrics.SwapAvailable {
+		b.WriteString("  Swap: Unavailable\n")
+	} else if m.metrics.SwapTotal > 0 {
 		b.WriteString(fmt.Sprintf("  %s %s / %s\n",
 			labelStyle.Render("Swap:"),
 			valueStyle.Render(formatBytes(m.metrics.SwapUsed)),
@@ -488,7 +556,16 @@ func (m model) View() string {
 	// Disk
 	b.WriteString(headerStyle.Render("  💾 Disks"))
 	b.WriteString("\n")
+	if len(m.metrics.Disks) == 0 {
+		b.WriteString("  Unavailable\n")
+	} else if !m.metrics.DisksComplete {
+		b.WriteString("  Incomplete disk list: some drives could not be listed.\n")
+	}
 	for _, d := range m.metrics.Disks {
+		if !d.Available {
+			b.WriteString(fmt.Sprintf("  %s Unavailable\n", labelStyle.Render(d.Device)))
+			continue
+		}
 		diskColor := getPercentColor(d.UsedPercent)
 		freeSpace := formatBytes(d.Free)
 		barWidth := 30

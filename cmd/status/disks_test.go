@@ -13,7 +13,7 @@ import (
 func TestDiskFreeSpaceFitsTerminalWidth(t *testing.T) {
 	m := newModel()
 	updated, _ := m.Update(metricsMsg(MetricsSnapshot{
-		Disks: []DiskInfo{{Device: "C:", Free: 20 * 1024 * 1024 * 1024, UsedPercent: 75}},
+		DisksComplete: true, Disks: []DiskInfo{{Available: true, Device: "C:", Free: 20 * 1024 * 1024 * 1024, UsedPercent: 75}},
 	}))
 	m = updated.(model)
 	for _, width := range []int{80, 48, 40, 32, 18, 80} {
@@ -45,8 +45,8 @@ func TestDiskFreeSpaceRenderingAndRefresh(t *testing.T) {
 		{
 			name: "multiple drives with collected free space and a full drive",
 			disks: []DiskInfo{
-				{Device: "C:", Total: 100 * gb, Used: 75 * gb, Free: 20 * gb, UsedPercent: 75},
-				{Device: "D:", Total: 2 * gb, Used: 2 * gb, Free: 0, UsedPercent: 100},
+				{Available: true, Device: "C:", Total: 100 * gb, Used: 75 * gb, Free: 20 * gb, UsedPercent: 75},
+				{Available: true, Device: "D:", Total: 2 * gb, Used: 2 * gb, Free: 0, UsedPercent: 100},
 			},
 			rows: []string{
 				"C: 75.0 GB / 100.0 GB (75.0%)\n  " + strings.Repeat("█", 22) + strings.Repeat("░", 8) + "  Free: 20.0 GB",
@@ -56,8 +56,8 @@ func TestDiskFreeSpaceRenderingAndRefresh(t *testing.T) {
 		{
 			name: "refreshed metrics",
 			disks: []DiskInfo{
-				{Device: "C:", Total: 100 * gb, Used: 50 * gb, Free: 45 * gb, UsedPercent: 50},
-				{Device: "D:", Total: 2 * gb, Used: gb, Free: gb, UsedPercent: 50},
+				{Available: true, Device: "C:", Total: 100 * gb, Used: 50 * gb, Free: 45 * gb, UsedPercent: 50},
+				{Available: true, Device: "D:", Total: 2 * gb, Used: gb, Free: gb, UsedPercent: 50},
 			},
 			rows: []string{
 				"C: 50.0 GB / 100.0 GB (50.0%)\n  " + strings.Repeat("█", 15) + strings.Repeat("░", 15) + "  Free: 45.0 GB",
@@ -66,7 +66,7 @@ func TestDiskFreeSpaceRenderingAndRefresh(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			updated, _ := m.Update(metricsMsg(MetricsSnapshot{Disks: tc.disks}))
+			updated, _ := m.Update(metricsMsg(MetricsSnapshot{DisksComplete: true, Disks: tc.disks}))
 			m = updated.(model)
 			view := m.View()
 			for _, row := range tc.rows {
