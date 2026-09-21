@@ -114,3 +114,36 @@ func TestAllUnavailableDoesNotRenderPercentagesOrBars(t *testing.T) {
 		t.Fatalf("missing measurements rendered as values:\n%s", view)
 	}
 }
+
+func TestPartialDiskEnumerationPreservesReadingsAndRecovers(t *testing.T) {
+	c := healthyCollector()
+	partitions := c.partitions
+	c.partitions = func(ctx context.Context, all bool) ([]disk.PartitionStat, error) {
+		readable, err := partitions(ctx, all)
+		if err != nil {
+			return nil, err
+		}
+		return readable[:1], errors.New("another drive could not be listed")
+	}
+	c.diskUsage = func(context.Context, string) (*disk.UsageStat, error) {
+		return &disk.UsageStat{Total: 1024, Used: 1024, UsedPercent: 100}, nil
+	}
+	snapshot := c.Collect()
+	if snapshot.DisksComplete || snapshot.HealthScore != -1 || snapshot.HealthMessage != "Missing metrics: Disks (incomplete list); Disk C: Critical" {
+		t.Fatalf("partial enumeration lost availability or warning: %+v", snapshot)
+	}
+	m := newModel()
+	updated, _ := m.Update(metricsMsg(snapshot))
+	m = updated.(model)
+	view := m.View()
+	if !strings.Contains(view, "Incomplete disk list") || !strings.Contains(view, "C: 1.0 KB / 1.0 KB (100.0%)") || !strings.Contains(view, "Health: Unavailable") {
+		t.Fatalf("partial enumeration lost readable drive:\n%s", view)
+	}
+	c.partitions = partitions
+	snapshot = c.Collect()
+	updated, _ = m.Update(metricsMsg(snapshot))
+	view = updated.View()
+	if !snapshot.DisksComplete || snapshot.HealthScore != 80 || len(snapshot.Disks) != 2 || strings.Contains(view, "Incomplete") || strings.Contains(view, "Unavailable") {
+		t.Fatalf("enumeration recovery failed:\n%s", view)
+	}
+}

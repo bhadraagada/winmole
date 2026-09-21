@@ -22,7 +22,7 @@ func TestDiskHealthUsesFullestDrive(t *testing.T) {
 		{"equal usage", []DiskInfo{{Available: true, Device: "D:", UsedPercent: 99}, {Available: true, Device: "C:", UsedPercent: 99}}, 80, "Disk C: Critical"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			score, message := calculateHealthScore(MetricsSnapshot{CPUAvailable: true, MemAvailable: true, SwapAvailable: true, Disks: tc.disks})
+			score, message := calculateHealthScore(MetricsSnapshot{CPUAvailable: true, MemAvailable: true, SwapAvailable: true, DisksComplete: true, Disks: tc.disks})
 			if score != tc.score || message != tc.message {
 				t.Fatalf("got %d, %q; want %d, %q", score, message, tc.score, tc.message)
 			}

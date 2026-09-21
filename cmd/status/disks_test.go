@@ -13,7 +13,7 @@ import (
 func TestDiskFreeSpaceFitsTerminalWidth(t *testing.T) {
 	m := newModel()
 	updated, _ := m.Update(metricsMsg(MetricsSnapshot{
-		Disks: []DiskInfo{{Available: true, Device: "C:", Free: 20 * 1024 * 1024 * 1024, UsedPercent: 75}},
+		DisksComplete: true, Disks: []DiskInfo{{Available: true, Device: "C:", Free: 20 * 1024 * 1024 * 1024, UsedPercent: 75}},
 	}))
 	m = updated.(model)
 	for _, width := range []int{80, 48, 40, 32, 18, 80} {
@@ -66,7 +66,7 @@ func TestDiskFreeSpaceRenderingAndRefresh(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			updated, _ := m.Update(metricsMsg(MetricsSnapshot{Disks: tc.disks}))
+			updated, _ := m.Update(metricsMsg(MetricsSnapshot{DisksComplete: true, Disks: tc.disks}))
 			m = updated.(model)
 			view := m.View()
 			for _, row := range tc.rows {

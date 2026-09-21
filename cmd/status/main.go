@@ -66,7 +66,8 @@ type MetricsSnapshot struct {
 	SwapPercent   float64
 
 	// Disk
-	Disks []DiskInfo
+	Disks         []DiskInfo
+	DisksComplete bool
 
 	// Network
 	Networks []NetworkInfo
@@ -199,33 +200,34 @@ func (c *Collector) Collect() MetricsSnapshot {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if partitions, err := c.partitions(ctx, false); err == nil {
-			var disks []DiskInfo
-			for _, p := range partitions {
-				// Include physical drives (drive letter format like "C:", "D:", etc.)
-				// Skip network drives and special mount points
-				if len(p.Device) >= 2 && p.Device[1] == ':' {
-					// It's a drive letter (A: through Z:)
-					if usage, err := c.diskUsage(ctx, p.Mountpoint); err == nil && usage != nil && usage.Total > 0 {
-						disks = append(disks, DiskInfo{
-							Available:   true,
-							Device:      p.Device,
-							Mountpoint:  p.Mountpoint,
-							Total:       usage.Total,
-							Used:        usage.Used,
-							Free:        usage.Free,
-							UsedPercent: usage.UsedPercent,
-							Fstype:      p.Fstype,
-						})
-					} else {
-						disks = append(disks, DiskInfo{Device: p.Device, Mountpoint: p.Mountpoint, Fstype: p.Fstype})
-					}
+		// Windows can return readable partitions alongside enumeration warnings.
+		partitions, err := c.partitions(ctx, false)
+		var disks []DiskInfo
+		for _, p := range partitions {
+			// Include physical drives (drive letter format like "C:", "D:", etc.)
+			// Skip network drives and special mount points
+			if len(p.Device) >= 2 && p.Device[1] == ':' {
+				// It's a drive letter (A: through Z:)
+				if usage, err := c.diskUsage(ctx, p.Mountpoint); err == nil && usage != nil && usage.Total > 0 {
+					disks = append(disks, DiskInfo{
+						Available:   true,
+						Device:      p.Device,
+						Mountpoint:  p.Mountpoint,
+						Total:       usage.Total,
+						Used:        usage.Used,
+						Free:        usage.Free,
+						UsedPercent: usage.UsedPercent,
+						Fstype:      p.Fstype,
+					})
+				} else {
+					disks = append(disks, DiskInfo{Device: p.Device, Mountpoint: p.Mountpoint, Fstype: p.Fstype})
 				}
 			}
-			mu.Lock()
-			snapshot.Disks = disks
-			mu.Unlock()
 		}
+		mu.Lock()
+		snapshot.Disks = disks
+		snapshot.DisksComplete = err == nil
+		mu.Unlock()
 	}()
 
 	// Network
@@ -308,6 +310,8 @@ func calculateHealthScore(s MetricsSnapshot) (int, string) {
 	}
 	if len(s.Disks) == 0 {
 		missing = append(missing, "Disks")
+	} else if !s.DisksComplete {
+		missing = append(missing, "Disks (incomplete list)")
 	}
 	for _, d := range s.Disks {
 		if !d.Available {
@@ -554,6 +558,8 @@ func (m model) View() string {
 	b.WriteString("\n")
 	if len(m.metrics.Disks) == 0 {
 		b.WriteString("  Unavailable\n")
+	} else if !m.metrics.DisksComplete {
+		b.WriteString("  Incomplete disk list: some drives could not be listed.\n")
 	}
 	for _, d := range m.metrics.Disks {
 		if !d.Available {
