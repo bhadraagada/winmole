@@ -153,6 +153,11 @@ and memory usage. CPU is the default; the process heading shows the active sort.
 Each drive shows its used and total capacity, usage percentage, and free space
 beside the usage bar. Free space updates with each metrics refresh.
 
+If CPU, RAM, swap, or a drive cannot be read, its reading shows as unavailable.
+The health score is withheld until all its inputs are available; warnings from
+readable metrics still appear. A successful refresh restores the readings and
+score. An idle CPU and a system with no swap remain valid readings.
+
 ### Developer Artifact Purge
 
 ```powershell

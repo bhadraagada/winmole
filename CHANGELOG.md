@@ -38,6 +38,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First-time analyzer, status, and script builds now tolerate Go download progress
   on stderr in Windows PowerShell 5.1. Build failures still show diagnostics, and
   analyzer and status commands exit with failure when compilation fails.
+- Failed CPU, RAM, swap, and disk readings now show as unavailable instead of
+  zero usage. Incomplete readings withhold the health score while retaining
+  known resource warnings; successful refreshes restore normal reporting.
 
 ## [0.1.1] - 2026-07-31
 
