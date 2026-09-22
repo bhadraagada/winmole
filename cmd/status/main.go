@@ -518,7 +518,7 @@ func (m model) layout() (lines, footer []string, height int) {
 	if m.width < 2 {
 		return nil, []string{"q"}, 0
 	}
-	if m.width < 42 || m.height < 4 {
+	if m.width < lipgloss.Width(strings.Join(footer, "\n")) || m.height < 4 {
 		footer = []string{ansi.Truncate("q quit | ↑/↓ scroll", m.width, "")}
 	}
 	for i := range footer {

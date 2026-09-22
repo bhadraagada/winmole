@@ -138,6 +138,9 @@ func TestDashboardTinyAndLoadingDimensions(t *testing.T) {
 			{Width: 3, Height: 3}, {Width: 10, Height: 15},
 			{Width: 18, Height: 24}, {Width: 60, Height: 1},
 			{Width: 80, Height: 2},
+			{Width: 41, Height: 15}, {Width: 42, Height: 15},
+			{Width: 43, Height: 15}, {Width: 44, Height: 15},
+			{Width: 45, Height: 15},
 		} {
 			m := newModel()
 			m.ready = ready
