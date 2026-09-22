@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The status dashboard now displays free space beside each drive's usage bar.
 - Press `m` in the status dashboard to switch the top five processes between
   CPU and memory usage, including memory-heavy processes outside the CPU top five.
+- The status dashboard now wraps to the terminal width and scrolls with arrow
+  keys, `j`/`k`, `PgUp`/`PgDn`, and `Home`/`End`, keeping controls visible in short
+  windows and preserving access to long health warnings and lower sections.
 
 ### Fixed
 

@@ -58,31 +58,8 @@ go build -o bin/status.exe ./cmd/status
 - **Error handling**: Use `try/catch` for operations that may fail
 - **Comments**: Explain "why" not "what"
 
-Example:
-```powershell
-function Remove-SafeItem {
-    [CmdletBinding(SupportsShouldProcess)]
-    param(
-        [Parameter(Mandatory)]
-        [string]$Path,
-        
-        [switch]$Recurse
-    )
-    
-    # Validate path is not protected before removal
-    if (Test-ProtectedPath -Path $Path) {
-        Write-Warning "Cannot remove protected path: $Path"
-        return $false
-    }
-    
-    if ($PSCmdlet.ShouldProcess($Path, "Remove")) {
-        Remove-Item -Path $Path -Recurse:$Recurse -Force -ErrorAction SilentlyContinue
-        return $true
-    }
-    
-    return $false
-}
-```
+Reuse the functions in `lib/core/file_ops.ps1` for deletion. Do not redefine
+`Remove-SafeItem`; its protection, whitelist, and dry-run checks belong in one place.
 
 ### Go Code
 
@@ -96,15 +73,18 @@ function Remove-SafeItem {
 **Always use safe wrappers, never raw `Remove-Item` on user paths:**
 
 ```powershell
-# Single file/directory
+. .\lib\core\file_ops.ps1
+Set-DryRunMode -Enabled $true
+
+# Preview a file or directory, including its contents
 Remove-SafeItem -Path "C:\path\to\file"
-
-# With recursion
 Remove-SafeItem -Path "C:\path\to\dir" -Recurse
-
-# With dry-run support
-Remove-SafeItem -Path "C:\path\to\file" -WhatIf
 ```
+
+`Remove-SafeItem` does not support `-WhatIf`. Use `Set-DryRunMode` after loading
+the helpers, or set `$env:WINMOLE_DRY_RUN = '1'` before loading them in a fresh
+PowerShell session. For the cleanup command, use `winmole clean -DryRun`.
+Keep preview mode enabled while developing; disabling it allows real deletion.
 
 See `lib/core/file_ops.ps1` for all safe functions.
 
@@ -116,13 +96,13 @@ See `lib/core/file_ops.ps1` for all safe functions.
 - Delete files without checking protection lists
 - Modify system-critical paths (e.g., `C:\Windows`, `C:\Program Files`)
 - Commit code changes unless explicitly requested
-- Run destructive operations without `-WhatIf` validation
+- Run destructive operations without dry-run validation
 
 ### ALWAYS Do These
 
 - Use `Remove-SafeItem` or other safe helpers for deletions
 - Check `Test-ProtectedPath` before cleanup operations
-- Test with `-WhatIf` mode first
+- Test with the helper's dry-run mode first
 - Validate syntax before suggesting changes
 - Write tests for new functionality
 
@@ -133,7 +113,7 @@ See `lib/core/file_ops.ps1` for all safe functions.
 1. **Syntax Validation**: PowerShell parser checks
 2. **Unit Tests**: Pester tests for individual functions
 3. **Integration Tests**: Full command execution (tagged with `Integration`)
-4. **Dry-run Tests**: `-WhatIf` to validate without deletion
+4. **Dry-run Tests**: `Set-DryRunMode -Enabled $true` to validate without deletion
 
 ### Writing Tests
 
@@ -141,20 +121,26 @@ See `lib/core/file_ops.ps1` for all safe functions.
 Describe "Remove-SafeItem" {
     BeforeAll {
         . "$PSScriptRoot\..\lib\core\file_ops.ps1"
+        $script:previousDryRun = $script:DryRun
+        Set-DryRunMode -Enabled $true
+    }
+
+    AfterAll {
+        Set-DryRunMode -Enabled $script:previousDryRun
     }
     
     It "Should return false for protected paths" {
-        $result = Remove-SafeItem -Path "C:\Windows" -WhatIf
+        $result = Remove-SafeItem -Path "C:\Windows"
         $result | Should -Be $false
     }
     
-    It "Should remove files when path is valid" {
+    It "Should preserve files during a preview" {
         $testFile = Join-Path $TestDrive "test.txt"
         "test" | Set-Content $testFile
         
-        Remove-SafeItem -Path $testFile
+        Remove-SafeItem -Path $testFile | Should -Be $true
         
-        Test-Path $testFile | Should -Be $false
+        Test-Path $testFile | Should -Be $true
     }
 }
 ```

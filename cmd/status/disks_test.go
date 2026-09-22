@@ -17,7 +17,7 @@ func TestDiskFreeSpaceFitsTerminalWidth(t *testing.T) {
 	}))
 	m = updated.(model)
 	for _, width := range []int{80, 48, 40, 32, 18, 80} {
-		updated, _ = m.Update(tea.WindowSizeMsg{Width: width, Height: 24})
+		updated, _ = m.Update(tea.WindowSizeMsg{Width: width, Height: 200})
 		m = updated.(model)
 		rows := 0
 		for _, line := range strings.Split(m.View(), "\n") {

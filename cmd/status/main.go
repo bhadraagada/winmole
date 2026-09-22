@@ -401,6 +401,8 @@ type model struct {
 	collecting   bool
 	width        int
 	height       int
+	sized        bool
+	scroll       int
 }
 
 // Messages
@@ -441,6 +443,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "c":
 			m.catHidden = !m.catHidden
+		case "up", "k":
+			m.scroll--
+		case "down", "j":
+			m.scroll++
+		case "pgup", "pgdown", "home", "end":
+			lines, _, height := m.layout()
+			switch msg.String() {
+			case "pgup":
+				m.scroll -= height
+			case "pgdown":
+				m.scroll += height
+			case "home":
+				m.scroll = 0
+			case "end":
+				m.scroll = len(lines) - height
+			}
 		case "m":
 			m.sortByMemory = !m.sortByMemory
 			sortProcesses(m.metrics.Processes, m.sortByMemory)
@@ -451,6 +469,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.sized = true
 	case tickMsg:
 		m.animFrame++
 		if m.animFrame%2 == 0 && !m.collecting {
@@ -466,10 +485,52 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ready = true
 		m.collecting = false
 	}
+	lines, _, height := m.layout()
+	m.scroll = min(max(0, m.scroll), max(0, len(lines)-height))
 	return m, nil
 }
 
 func (m model) View() string {
+	lines, footer, height := m.layout()
+	start := min(max(0, m.scroll), max(0, len(lines)-height))
+	end := min(len(lines), start+height)
+	visible := append([]string{}, lines[start:end]...)
+	// Keep the controls at the bottom even when the snapshot has fewer rows.
+	for len(visible) < height {
+		visible = append(visible, "")
+	}
+	return strings.Join(append(visible, footer...), "\n")
+}
+
+func (m model) layout() (lines, footer []string, height int) {
+	footer = []string{
+		"[↑/↓ j/k] scroll [PgUp/PgDn] page [Home/End]",
+		"[q] quit [r] refresh [m] sort [c] mascot",
+	}
+	content := strings.Trim(m.content(), "\n")
+	if !m.sized {
+		lines = strings.Split(content, "\n")
+		return lines, footer, len(lines)
+	}
+	if m.width <= 0 || m.height <= 0 {
+		return nil, nil, 0
+	}
+	if m.width < 2 {
+		return nil, []string{"q"}, 0
+	}
+	if m.width < lipgloss.Width(strings.Join(footer, "\n")) || m.height < 4 {
+		footer = []string{ansi.Truncate("q quit | ↑/↓ scroll", m.width, "")}
+	}
+	for i := range footer {
+		footer[i] = dimStyle.Render(footer[i])
+	}
+	// Lip Gloss wraps by grapheme width and restores ANSI styles on each row,
+	// so scrolling into a wrapped warning preserves its color.
+	lines = strings.Split(lipgloss.NewStyle().Width(m.width).Render(content), "\n")
+	return lines, footer, max(0, m.height-len(footer))
+}
+
+func (m model) content() string {
 	if !m.ready {
 		return "\n  Loading system metrics..."
 	}
@@ -624,10 +685,6 @@ func (m model) View() string {
 		}
 		b.WriteString("\n")
 	}
-
-	// Footer
-	b.WriteString(dimStyle.Render("  [q] quit  [r] refresh  [m] CPU/memory sort  [c] toggle winmole"))
-	b.WriteString("\n")
 
 	return b.String()
 }
