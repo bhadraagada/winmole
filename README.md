@@ -149,6 +149,11 @@ Free    156.3 GB / 476.9 GB              Up      ▮▯▯▯▯  0.8 MB/s
 
 Press `m` in the status dashboard to switch the top five processes between CPU
 and memory usage. CPU is the default; the process heading shows the active sort.
+Use `Up`/`Down` or `k`/`j` to scroll, `PgUp`/`PgDn` to move a page, and
+`Home`/`End` to jump to the first or last row. The dashboard wraps to the terminal
+width and keeps its controls visible, so lower sections and long health warnings
+remain reachable in a short window. Very small windows show compact controls;
+enlarge a one-column or one-row window to read metrics.
 
 Each drive shows its used and total capacity, usage percentage, and free space
 beside the usage bar. Free space updates with each metrics refresh.
