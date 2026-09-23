@@ -106,6 +106,13 @@ starting directory, the same keys scan its parent, so you can explore above the
 path you launched with. While a scan runs, wait for it to finish or press `q` or
 `Ctrl+C` to quit.
 
+The analyzer fits the listing to the terminal, keeping the selected entry, its
+size, and navigation controls visible. Long names and paths retain their suffix;
+usage bars shrink first. The `f` large-files panel shares the available rows with
+the listing and reports how many files are hidden. Enlarge windows smaller than
+40 columns by 9 rows to browse. A delete confirmation displays its full target;
+if it cannot fit, resize before confirming or press `n`/`Esc` to cancel.
+
 ### Save a disk usage report
 
 ```powershell

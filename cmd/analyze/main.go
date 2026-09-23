@@ -18,6 +18,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/rivo/uniseg"
 )
 
@@ -295,6 +296,9 @@ func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.deleteConfirm {
 		switch msg.String() {
 		case "y", "Y":
+			if _, fits := m.confirmationView(); !fits {
+				return m, nil
+			}
 			m.deleteConfirm = false
 			if len(m.deleteTargets) > 0 {
 				// Multi-delete
@@ -425,88 +429,100 @@ func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// Before Bubble Tea reports the terminal size, use a conventional viewport.
+func (m model) viewSize() (int, int) {
+	if m.width == 0 && m.height == 0 {
+		return 80, 24
+	}
+	return max(1, m.width), max(1, m.height)
+}
+
+func (m model) confirmationView() (string, bool) {
+	width, height := m.viewSize()
+	// Never truncate a destructive target. Acceptance uses this same fit check.
+	view := "Delete?\n" + ansi.Hardwrap(m.deleteTarget, width, true) + "\n(y/n)"
+	if width < 24 || strings.Count(view, "\n")+1 > height {
+		return ansi.Truncate("Resize to confirm; n/Esc cancels", width, ""), false
+	}
+	return colorRed + view + colorReset, true
+}
+
 func (m model) View() string {
-	var b strings.Builder
-
-	// Header
-	b.WriteString(fmt.Sprintf("%s%s WinMole Disk Analyzer %s\n", colorPurpleBold, iconDisk, colorReset))
-	b.WriteString(fmt.Sprintf("%s%s%s\n", colorGray, m.path, colorReset))
-	b.WriteString("\n")
-
-	// Show delete confirmation
+	width, height := m.viewSize()
 	if m.deleteConfirm {
-		b.WriteString(fmt.Sprintf("%s%s Delete %s? (y/n)%s\n", colorRed, iconTrash, m.deleteTarget, colorReset))
-		return b.String()
+		view, _ := m.confirmationView()
+		return view
+	}
+	if width < 40 || height < 9 {
+		return ansi.Truncate("Resize to 40x9 or larger; q quits", width, "")
 	}
 
-	// Scanning indicator
+	lines := []string{
+		colorPurpleBold + iconDisk + " WinMole Disk Analyzer" + colorReset,
+		colorGray + truncatePath(m.path, width) + colorReset,
+		"",
+	}
 	if m.scanning {
-		b.WriteString(fmt.Sprintf("%s⠋ Scanning...%s\n", colorCyan, colorReset))
+		lines = append(lines, colorCyan+"⠋ Scanning..."+colorReset)
 		if m.scanTotal > 0 {
-			b.WriteString(fmt.Sprintf("%s  %d / %d items%s\n", colorGray, m.scanProgress, m.scanTotal, colorReset))
+			lines = append(lines, ansi.Truncate(fmt.Sprintf("  %d / %d items", m.scanProgress, m.scanTotal), width, "..."))
 		}
-		return b.String()
+		return strings.Join(append(lines, "q quit"), "\n")
 	}
 
-	// Error display
+	footer := "↑↓ navigate  ↵ enter  ← back  f files  d delete  r refresh  q quit"
+	if ansi.StringWidth(footer) > width {
+		footer = "↑↓ navigate  ↵ enter  ← back\nf files  d delete  r refresh  q quit"
+	}
+	footerRows := strings.Count(footer, "\n") + 1
 	if m.err != nil {
-		b.WriteString(fmt.Sprintf("%sError: %v%s\n", colorRed, m.err, colorReset))
-		b.WriteString("\n")
+		// Keep retry controls and at least one entry visible after an operation error.
+		errorRows := max(1, height-len(lines)-footerRows-4)
+		errorLines := strings.Split(ansi.Wrap("Error: "+m.err.Error(), width, ""), "\n")
+		if len(errorLines) > errorRows {
+			errorLines = errorLines[:errorRows]
+			errorLines[errorRows-1] = ansi.Truncate(errorLines[errorRows-1], width-3, "") + "..."
+		}
+		lines = append(lines, colorRed+strings.Join(errorLines, "\n")+colorReset)
 	}
 
-	// Total size. Flag it as a lower bound when any child was truncated, so an
-	// under-count is visible rather than silently wrong.
-	anyPartial := false
-	for _, e := range m.entries {
-		if e.Partial {
-			anyPartial = true
+	total := formatBytes(m.totalSize)
+	for _, entry := range m.entries {
+		if entry.Partial {
+			total = "≥ " + total + " (+ = partial)"
 			break
 		}
 	}
-	if anyPartial {
-		b.WriteString(fmt.Sprintf("  Total: %s≥ %s%s %s(+ = partial: timed out or unreadable)%s\n",
-			colorYellow, formatBytes(m.totalSize), colorReset, colorGray, colorReset))
-	} else {
-		b.WriteString(fmt.Sprintf("  Total: %s%s%s\n", colorYellow, formatBytes(m.totalSize), colorReset))
-	}
-	b.WriteString("\n")
-
-	// Large files toggle
-	if m.showLargeFiles && len(m.largeFiles) > 0 {
-		b.WriteString(fmt.Sprintf("%s%s Large Files (>100MB):%s\n", colorCyanBold, iconFile, colorReset))
-		for i, f := range m.largeFiles {
-			if i >= 10 {
-				b.WriteString(fmt.Sprintf("  %s... and %d more%s\n", colorGray, len(m.largeFiles)-10, colorReset))
-				break
+	lines = append(lines, "  Total: "+colorYellow+total+colorReset)
+	// Count rendered rows because wrapped errors occupy multiple lines.
+	available := height - strings.Count(strings.Join(lines, "\n"), "\n") - 1 - footerRows - 1
+	if m.showLargeFiles && len(m.largeFiles) > 0 && available > 1 {
+		// Share the remaining height with the directory list; always reserve a selected row.
+		panelRows := min(12, available/2)
+		if panelRows >= 3 {
+			count := min(len(m.largeFiles), panelRows-2)
+			lines = append(lines, colorCyanBold+"Large Files (>100MB):"+colorReset)
+			for _, file := range m.largeFiles[:count] {
+				prefix := "  " + formatBytes(file.Size) + " "
+				lines = append(lines, colorYellow+strings.TrimSuffix(prefix, " ")+colorReset+" "+truncatePath(file.Path, min(60, width-ansi.StringWidth(prefix))))
 			}
-			b.WriteString(fmt.Sprintf("  %s%s%s %s\n", colorYellow, formatBytes(f.Size), colorReset, truncatePath(f.Path, 60)))
+			if count < len(m.largeFiles) {
+				lines = append(lines, fmt.Sprintf("  ... and %d more", len(m.largeFiles)-count))
+			}
+		} else {
+			lines = append(lines, ansi.Truncate(fmt.Sprintf("Large files: %d (resize to show)", len(m.largeFiles)), width, "..."))
 		}
-		b.WriteString("\n")
 	}
-
-	// Directory entries
-	visibleEntries := m.height - 12
-	if visibleEntries < 5 {
-		visibleEntries = 20
-	}
-
-	start := 0
-	if m.selected >= visibleEntries {
-		start = m.selected - visibleEntries + 1
-	}
-
+	visibleEntries := max(1, height-strings.Count(strings.Join(lines, "\n"), "\n")-1-footerRows-1)
+	start := max(0, m.selected-visibleEntries+1)
 	for i := start; i < len(m.entries) && i < start+visibleEntries; i++ {
 		entry := m.entries[i]
 		prefix := "  "
-
-		// Selection indicator
 		if i == m.selected {
-			prefix = fmt.Sprintf("%s%s%s ", colorCyan, iconArrow, colorReset)
+			prefix = colorCyan + iconArrow + colorReset + " "
 		} else if m.multiSelected[entry.Path] {
-			prefix = fmt.Sprintf("%s%s%s ", colorGreen, iconSelected, colorReset)
+			prefix = colorGreen + iconSelected + colorReset + " "
 		}
-
-		// Icon
 		icon := iconFile
 		if entry.IsDir {
 			icon = iconFolder
@@ -514,53 +530,30 @@ func (m model) View() string {
 		if entry.IsCleanable {
 			icon = iconClean
 		}
-
-		// Size and percentage
-		pct := float64(0)
-		if m.totalSize > 0 {
-			pct = float64(entry.Size) / float64(m.totalSize) * 100
-		}
-
-		// Bar
-		barWidth := 20
-		filled := int(pct / 100 * float64(barWidth))
-		bar := strings.Repeat("█", filled) + strings.Repeat("░", barWidth-filled)
-
-		// Color based on selection
-		nameColor := colorReset
-		if i == m.selected {
-			nameColor = colorCyanBold
-		}
-
 		sizeText := formatBytes(entry.Size)
 		if entry.Partial {
 			sizeText += "+"
 		}
-
-		b.WriteString(fmt.Sprintf("%s%s %s%8s%s %s%s%s %s%.1f%%%s %s\n",
-			prefix,
-			icon,
-			colorYellow, sizeText, colorReset,
-			colorGray, bar, colorReset,
-			colorDim, pct, colorReset,
-			nameColor+entry.Name+colorReset,
-		))
+		prefix += icon + " " + colorYellow + fmt.Sprintf("%9s", sizeText) + colorReset + " "
+		pct := float64(0)
+		if m.totalSize > 0 {
+			pct = float64(entry.Size) / float64(m.totalSize) * 100
+		}
+		percent := fmt.Sprintf("%.1f%% ", pct)
+		// Preserve space for the name, shrinking the decorative bar first.
+		barWidth := min(20, max(0, width-ansi.StringWidth(prefix)-ansi.StringWidth(percent)-20))
+		if barWidth > 0 {
+			filled := min(barWidth, max(0, int(pct/100*float64(barWidth))))
+			prefix += colorGray + strings.Repeat("█", filled) + strings.Repeat("░", barWidth-filled) + colorReset + " "
+		}
+		prefix += colorDim + percent + colorReset
+		nameColor := colorReset
+		if i == m.selected {
+			nameColor = colorCyanBold
+		}
+		lines = append(lines, prefix+nameColor+truncatePath(entry.Name, width-ansi.StringWidth(prefix))+colorReset)
 	}
-
-	// Footer with keybindings
-	b.WriteString("\n")
-	b.WriteString(fmt.Sprintf("%s↑↓%s navigate  %s↵%s enter  %s←%s back  %sf%s files  %sd%s delete  %sr%s refresh  %sq%s quit%s\n",
-		colorCyan, colorReset,
-		colorCyan, colorReset,
-		colorCyan, colorReset,
-		colorCyan, colorReset,
-		colorCyan, colorReset,
-		colorCyan, colorReset,
-		colorCyan, colorReset,
-		colorReset,
-	))
-
-	return b.String()
+	return strings.Join(append(lines, "", footer), "\n")
 }
 
 // scanPath scans a directory and returns entries
