@@ -139,10 +139,34 @@ func TestAnalyzerConfirmationRequiresVisibleTarget(t *testing.T) {
 	}
 	m.width, m.height = 40, 9
 	m.deleteTarget = "2 items"
-	m.deleteTargets = []string{`C:\fixture\one.bin`, `C:\fixture\two.bin`}
+	m.deleteTargets = []string{
+		`C:\fixture\` + strings.Repeat("long folder\\", 20) + "two.bin",
+		`C:\fixture\` + strings.Repeat("long folder\\", 20) + "one.bin",
+	}
+	view = assertViewFits(t, m)
+	if !strings.Contains(view, "Resize") {
+		t.Fatal("multi-delete confirmation hid actual target paths")
+	}
+	updated, command = m.Update(navigationKey("y"))
+	if command != nil || !updated.(model).deleteConfirm {
+		t.Fatal("invisible multi-delete targets could be confirmed")
+	}
+	updated, command = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if command != nil || updated.(model).deleteConfirm {
+		t.Fatal("small multi-delete confirmation could not be cancelled")
+	}
+	m.height = 24
 	view = assertViewFits(t, m)
 	if !strings.Contains(view, "2 items") || !strings.Contains(view, "y/n") {
 		t.Fatal("multi-delete confirmation lost its count or controls")
+	}
+	for _, path := range m.deleteTargets {
+		if !strings.Contains(strings.ReplaceAll(view, "\n", ""), path) {
+			t.Fatal("multi-delete confirmation truncated a target")
+		}
+	}
+	if !strings.HasSuffix(m.deleteTargets[0], "two.bin") {
+		t.Fatal("rendering changed the actual deletion target order")
 	}
 	updated, command = m.Update(navigationKey("y"))
 	if command == nil || updated.(model).deleteConfirm || len(updated.(model).deleteTargets) != 0 {

@@ -440,7 +440,13 @@ func (m model) viewSize() (int, int) {
 func (m model) confirmationView() (string, bool) {
 	width, height := m.viewSize()
 	// Never truncate a destructive target. Acceptance uses this same fit check.
-	view := "Delete?\n" + ansi.Hardwrap(m.deleteTarget, width, true) + "\n(y/n)"
+	targets := m.deleteTarget
+	if len(m.deleteTargets) > 0 {
+		paths := append([]string(nil), m.deleteTargets...)
+		sort.Strings(paths)
+		targets += "\n" + strings.Join(paths, "\n")
+	}
+	view := "Delete?\n" + ansi.Hardwrap(targets, width, true) + "\n(y/n)"
 	if width < 24 || strings.Count(view, "\n")+1 > height {
 		return ansi.Truncate("Resize to confirm; n/Esc cancels", width, ""), false
 	}
