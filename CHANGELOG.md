@@ -44,6 +44,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Failed CPU, RAM, swap, and disk readings now show as unavailable instead of
   zero usage. Incomplete readings withhold the health score while retaining
   known resource warnings; successful refreshes restore normal reporting.
+- The disk analyzer now keeps its selected entry, sizes, and controls visible
+  in short and narrow terminals. Bars shrink, long Unicode names retain their
+  suffix, and the large-files panel shares the available rows. Delete prompts
+  require enough space to display the full target before accepting confirmation.
 
 ## [0.1.1] - 2026-07-31
 
