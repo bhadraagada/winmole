@@ -23,8 +23,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Analyzer and status launchers rebuild source checkouts when `go.mod` or
-  `go.sum` is newer than the binary, applying dependency-only updates.
 - The analyzer marks files it cannot stat as partial instead of reporting
   an apparently complete zero-byte measurement.
 - Analyzer input during a scan can no longer replace a parent listing with a
@@ -50,6 +48,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in short and narrow terminals. Bars shrink, long Unicode names retain their
   suffix, and the large-files panel shares the available rows. Delete prompts
   require enough space to display the full target before accepting confirmation.
+- Analyzer and status launchers rebuild source checkouts when `go.mod` or
+  `go.sum` is newer than the binary, applying dependency-only updates.
 
 ## [0.1.1] - 2026-07-31
 
