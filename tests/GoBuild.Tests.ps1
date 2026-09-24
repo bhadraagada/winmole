@@ -74,6 +74,39 @@ exit /b 0
             & "Build-$($Name)Tool" | Should -BeTrue
         }
 
+        It 'rebuilds only for newer metadata when <ModuleFile> is <Age>' -ForEach @(
+            @{ ModuleFile = 'go.mod'; Age = 'newer'; Days = 1 },
+            @{ ModuleFile = 'go.sum'; Age = 'newer'; Days = 1 },
+            @{ ModuleFile = 'go.mod'; Age = 'older'; Days = -1 },
+            @{ ModuleFile = 'go.sum'; Age = 'older'; Days = -1 },
+            @{ ModuleFile = 'go.mod'; Age = 'equal'; Days = 0 },
+            @{ ModuleFile = 'go.sum'; Age = 'equal'; Days = 0 },
+            @{ ModuleFile = 'go.mod'; Age = 'missing'; Days = $null },
+            @{ ModuleFile = 'go.sum'; Age = 'missing'; Days = $null }
+        ) {
+            $script:Json = $false
+            Mock Get-GoBinaryPath { Join-Path $script:BIN_DIR 'launch.cmd' }
+            Mock "Build-$($Name)Tool" { $true }
+            $binaryPath = Get-GoBinaryPath
+            Set-Content -LiteralPath $binaryPath -Value "@echo off`r`nexit /b 0"
+            $binaryTime = [datetime]'2020-01-02'
+            (Get-Item -LiteralPath $binaryPath).LastWriteTime = $binaryTime
+            $sourcePath = Join-Path $script:CMD_DIR "$Name\main.go"
+            foreach ($filePath in @($sourcePath, (Join-Path $script:Fixture 'go.mod'), (Join-Path $script:Fixture 'go.sum'))) {
+                if ($Age -eq 'missing' -and (Split-Path -Leaf $filePath) -eq $ModuleFile) { continue }
+                Set-Content -LiteralPath $filePath -Value 'fixture'
+                (Get-Item -LiteralPath $filePath).LastWriteTime = $binaryTime.AddDays(-1)
+            }
+            if ($Age -ne 'missing') {
+                (Get-Item -LiteralPath (Join-Path $script:Fixture $ModuleFile)).LastWriteTime = $binaryTime.AddDays($Days)
+            }
+
+            & "Invoke-$($Name)Tool"
+
+            Should -Invoke "Build-$($Name)Tool" -Exactly -Times ([int]($Age -eq 'newer'))
+            $LASTEXITCODE | Should -Be 0
+        }
+
         It 'rejects a nonzero build and prevents the launcher from reporting success' {
             Set-Content -LiteralPath (Join-Path $script:Fixture 'go.sum') -Value ''
             Set-Content -LiteralPath $script:GoExe -Value "@echo off`r`necho fixture compilation failed 1>&2`r`nexit /b 7"
