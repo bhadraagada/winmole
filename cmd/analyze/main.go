@@ -333,7 +333,8 @@ func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "pgup", "pgdown":
 		width, height := m.viewSize()
-		_, _, pageSize := m.listingLayout(width, height)
+		// The total occupies one row regardless of its text or partial markers.
+		_, _, pageSize := m.listingLayout(width, height, "")
 		if msg.String() == "pgup" {
 			m.selected = max(0, m.selected-pageSize)
 		} else {
@@ -471,7 +472,16 @@ func (m model) View() string {
 		return ansi.Truncate("Resize to 40x9 or larger; q quits", width, "")
 	}
 
-	lines, footer, visibleEntries := m.listingLayout(width, height)
+	total := formatBytes(m.totalSize)
+	if !m.scanning {
+		for _, entry := range m.entries {
+			if entry.Partial {
+				total = "≥ " + total + " (+ = partial)"
+				break
+			}
+		}
+	}
+	lines, footer, visibleEntries := m.listingLayout(width, height, total)
 	if m.scanning {
 		return strings.Join(append(lines, footer), "\n")
 	}
@@ -518,7 +528,7 @@ func (m model) View() string {
 }
 
 // listingLayout shares the rendered row budget with keyboard paging.
-func (m model) listingLayout(width, height int) ([]string, string, int) {
+func (m model) listingLayout(width, height int, total string) ([]string, string, int) {
 	lines := []string{
 		colorPurpleBold + iconDisk + " WinMole Disk Analyzer" + colorReset,
 		colorGray + truncatePath(m.path, width) + colorReset,
@@ -548,13 +558,6 @@ func (m model) listingLayout(width, height int) ([]string, string, int) {
 		lines = append(lines, colorRed+strings.Join(errorLines, "\n")+colorReset)
 	}
 
-	total := formatBytes(m.totalSize)
-	for _, entry := range m.entries {
-		if entry.Partial {
-			total = "≥ " + total + " (+ = partial)"
-			break
-		}
-	}
 	lines = append(lines, "  Total: "+colorYellow+total+colorReset)
 	// Count rendered rows because wrapped errors occupy multiple lines.
 	available := height - strings.Count(strings.Join(lines, "\n"), "\n") - 1 - footerRows - 1

@@ -260,3 +260,19 @@ func TestAnalyzerPageNavigationEmptyAndConfirmation(t *testing.T) {
 		}
 	}
 }
+
+func BenchmarkAnalyzerPageNavigation(b *testing.B) {
+	for _, count := range []int{100, 100000} {
+		b.Run(fmt.Sprint(count), func(b *testing.B) {
+			m := newModel("fixture")
+			m.scanning = false
+			m.width, m.height = 80, 24
+			m.entries = make([]dirEntry, count)
+			key := navigationKey("pgdown")
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_, _ = m.Update(key)
+			}
+		})
+	}
+}
