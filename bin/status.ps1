@@ -136,6 +136,14 @@ function Invoke-StatusTool {
         $needsBuild = $true
     }
     
+    # Dependency-only updates must also invalidate a source checkout's binary.
+    if (-not $needsBuild -and (Test-Path -LiteralPath $srcPath)) {
+        $binaryTime = (Get-Item -LiteralPath $binaryPath).LastWriteTime
+        $needsBuild = @(Get-Item -LiteralPath (Join-Path $script:WINMOLE_ROOT 'go.mod'),
+            (Join-Path $script:WINMOLE_ROOT 'go.sum') -ErrorAction SilentlyContinue |
+            Where-Object { $_.LastWriteTime -gt $binaryTime }).Count -gt 0
+    }
+
     if ($needsBuild) {
         if (-not (Build-StatusTool)) {
             throw 'Unable to build system monitor.'
