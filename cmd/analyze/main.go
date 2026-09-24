@@ -331,6 +331,14 @@ func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.selected < len(m.entries)-1 {
 			m.selected++
 		}
+	case "pgup", "pgdown":
+		width, height := m.viewSize()
+		_, _, pageSize := m.listingLayout(width, height)
+		if msg.String() == "pgup" {
+			m.selected = max(0, m.selected-pageSize)
+		} else {
+			m.selected = min(max(0, len(m.entries)-1), m.selected+pageSize)
+		}
 	case "enter", "right", "l":
 		if !m.scanning && len(m.entries) > 0 {
 			entry := m.entries[m.selected]
@@ -419,9 +427,9 @@ func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			entry := m.entries[m.selected]
 			openInExplorer(entry.Path)
 		}
-	case "g":
+	case "g", "home":
 		m.selected = 0
-	case "G":
+	case "G", "end":
 		if len(m.entries) > 0 {
 			m.selected = len(m.entries) - 1
 		}
@@ -463,6 +471,54 @@ func (m model) View() string {
 		return ansi.Truncate("Resize to 40x9 or larger; q quits", width, "")
 	}
 
+	lines, footer, visibleEntries := m.listingLayout(width, height)
+	if m.scanning {
+		return strings.Join(append(lines, footer), "\n")
+	}
+	start := max(0, m.selected-visibleEntries+1)
+	for i := start; i < len(m.entries) && i < start+visibleEntries; i++ {
+		entry := m.entries[i]
+		prefix := "  "
+		if i == m.selected {
+			prefix = colorCyan + iconArrow + colorReset + " "
+		} else if m.multiSelected[entry.Path] {
+			prefix = colorGreen + iconSelected + colorReset + " "
+		}
+		icon := iconFile
+		if entry.IsDir {
+			icon = iconFolder
+		}
+		if entry.IsCleanable {
+			icon = iconClean
+		}
+		sizeText := formatBytes(entry.Size)
+		if entry.Partial {
+			sizeText += "+"
+		}
+		prefix += icon + " " + colorYellow + fmt.Sprintf("%9s", sizeText) + colorReset + " "
+		pct := float64(0)
+		if m.totalSize > 0 {
+			pct = float64(entry.Size) / float64(m.totalSize) * 100
+		}
+		percent := fmt.Sprintf("%.1f%% ", pct)
+		// Preserve space for the name, shrinking the decorative bar first.
+		barWidth := min(20, max(0, width-ansi.StringWidth(prefix)-ansi.StringWidth(percent)-20))
+		if barWidth > 0 {
+			filled := min(barWidth, max(0, int(pct/100*float64(barWidth))))
+			prefix += colorGray + strings.Repeat("█", filled) + strings.Repeat("░", barWidth-filled) + colorReset + " "
+		}
+		prefix += colorDim + percent + colorReset
+		nameColor := colorReset
+		if i == m.selected {
+			nameColor = colorCyanBold
+		}
+		lines = append(lines, prefix+nameColor+truncatePath(entry.Name, width-ansi.StringWidth(prefix))+colorReset)
+	}
+	return strings.Join(append(lines, "", footer), "\n")
+}
+
+// listingLayout shares the rendered row budget with keyboard paging.
+func (m model) listingLayout(width, height int) ([]string, string, int) {
 	lines := []string{
 		colorPurpleBold + iconDisk + " WinMole Disk Analyzer" + colorReset,
 		colorGray + truncatePath(m.path, width) + colorReset,
@@ -473,7 +529,7 @@ func (m model) View() string {
 		if m.scanTotal > 0 {
 			lines = append(lines, ansi.Truncate(fmt.Sprintf("  %d / %d items", m.scanProgress, m.scanTotal), width, "..."))
 		}
-		return strings.Join(append(lines, "q quit"), "\n")
+		return lines, "q quit", 0
 	}
 
 	footer := "↑↓ navigate  ↵ enter  ← back  f files  d delete  r refresh  q quit"
@@ -520,46 +576,7 @@ func (m model) View() string {
 		}
 	}
 	visibleEntries := max(1, height-strings.Count(strings.Join(lines, "\n"), "\n")-1-footerRows-1)
-	start := max(0, m.selected-visibleEntries+1)
-	for i := start; i < len(m.entries) && i < start+visibleEntries; i++ {
-		entry := m.entries[i]
-		prefix := "  "
-		if i == m.selected {
-			prefix = colorCyan + iconArrow + colorReset + " "
-		} else if m.multiSelected[entry.Path] {
-			prefix = colorGreen + iconSelected + colorReset + " "
-		}
-		icon := iconFile
-		if entry.IsDir {
-			icon = iconFolder
-		}
-		if entry.IsCleanable {
-			icon = iconClean
-		}
-		sizeText := formatBytes(entry.Size)
-		if entry.Partial {
-			sizeText += "+"
-		}
-		prefix += icon + " " + colorYellow + fmt.Sprintf("%9s", sizeText) + colorReset + " "
-		pct := float64(0)
-		if m.totalSize > 0 {
-			pct = float64(entry.Size) / float64(m.totalSize) * 100
-		}
-		percent := fmt.Sprintf("%.1f%% ", pct)
-		// Preserve space for the name, shrinking the decorative bar first.
-		barWidth := min(20, max(0, width-ansi.StringWidth(prefix)-ansi.StringWidth(percent)-20))
-		if barWidth > 0 {
-			filled := min(barWidth, max(0, int(pct/100*float64(barWidth))))
-			prefix += colorGray + strings.Repeat("█", filled) + strings.Repeat("░", barWidth-filled) + colorReset + " "
-		}
-		prefix += colorDim + percent + colorReset
-		nameColor := colorReset
-		if i == m.selected {
-			nameColor = colorCyanBold
-		}
-		lines = append(lines, prefix+nameColor+truncatePath(entry.Name, width-ansi.StringWidth(prefix))+colorReset)
-	}
-	return strings.Join(append(lines, "", footer), "\n")
+	return lines, footer, visibleEntries
 }
 
 // scanPath scans a directory and returns entries

@@ -4,9 +4,11 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -24,6 +26,14 @@ func navigationKey(key string) tea.KeyMsg {
 		return tea.KeyMsg{Type: tea.KeyCtrlC}
 	case "space":
 		return tea.KeyMsg{Type: tea.KeySpace}
+	case "pgup":
+		return tea.KeyMsg{Type: tea.KeyPgUp}
+	case "pgdown":
+		return tea.KeyMsg{Type: tea.KeyPgDown}
+	case "home":
+		return tea.KeyMsg{Type: tea.KeyHome}
+	case "end":
+		return tea.KeyMsg{Type: tea.KeyEnd}
 	}
 	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)}
 }
@@ -33,7 +43,7 @@ func TestScanningOnlyAcceptsQuit(t *testing.T) {
 	m.entries = []dirEntry{{Name: "old", Path: filepath.Join(m.path, "old"), IsDir: true}}
 	m.multiSelected[m.entries[0].Path] = true
 	m.history = []historyEntry{{Path: filepath.Dir(m.path)}}
-	for _, key := range []string{"backspace", "left", "h", "enter", "r", "g", "G", "j", "k", "space", "d", "D", "f"} {
+	for _, key := range []string{"backspace", "left", "h", "enter", "r", "g", "G", "j", "k", "space", "d", "D", "f", "pgup", "pgdown", "home", "end"} {
 		t.Run(key, func(t *testing.T) {
 			loading := m
 			loading.multiSelected = map[string]bool{m.entries[0].Path: true}
@@ -154,5 +164,99 @@ func TestFailedScanClearsOldEntriesAndRefreshRecovers(t *testing.T) {
 	m = updated.(model)
 	if m.err != nil || m.scanning || m.totalSize != 23 || len(m.entries) != 1 {
 		t.Fatal("successful retry did not replace the error with fresh entries")
+	}
+}
+
+func TestAnalyzerPageNavigation(t *testing.T) {
+	for _, size := range []tea.WindowSizeMsg{{Width: 40, Height: 9}, {Width: 60, Height: 15}, {Width: 80, Height: 24}, {Width: 120, Height: 40}} {
+		for _, panel := range []bool{false, true} {
+			for _, withError := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%dx%d/panel=%t/error=%t", size.Width, size.Height, panel, withError), func(t *testing.T) {
+					m := newModel("fixture")
+					m.scanning = false
+					m.width, m.height = size.Width, size.Height
+					m.showLargeFiles = panel
+					if withError {
+						m.err = errors.New(strings.Repeat("unavailable ", 15))
+					}
+					for i := 0; i < 100; i++ {
+						name := fmt.Sprintf("entry-%03d.bin", i)
+						m.entries = append(m.entries, dirEntry{Name: name, Path: name, Size: 1})
+						m.largeFiles = append(m.largeFiles, fileEntry{Path: "large.bin", Size: 200000000})
+					}
+					m.totalSize = 100
+					for _, resized := range []tea.WindowSizeMsg{size, {Width: 80, Height: 24}, size} {
+						updated, _ := m.Update(resized)
+						m = updated.(model)
+						m.selected = 0
+						// Count actual rendered listing rows, independent of the layout calculation.
+						page := strings.Count(assertViewFits(t, m), "entry-")
+						if page < 1 {
+							t.Fatal("no entry rows visible")
+						}
+						updated, command := m.Update(navigationKey("pgdown"))
+						m = updated.(model)
+						if command != nil || m.selected != page {
+							t.Fatalf("page down selected %d, want %d", m.selected, page)
+						}
+						view := assertViewFits(t, m)
+						if !strings.Contains(view, m.entries[m.selected].Name) {
+							t.Fatal("page hid selected entry")
+						}
+						updated, command = m.Update(navigationKey("pgup"))
+						m = updated.(model)
+						if command != nil || m.selected != 0 {
+							t.Fatal("page up did not return to first entry")
+						}
+						updated, _ = m.Update(navigationKey("end"))
+						m = updated.(model)
+						if m.selected != 99 {
+							t.Fatal("End did not select last entry")
+						}
+						updated, _ = m.Update(navigationKey("pgdown"))
+						m = updated.(model)
+						if m.selected != 99 {
+							t.Fatal("page down passed last entry")
+						}
+						updated, _ = m.Update(navigationKey("home"))
+						m = updated.(model)
+						updated, _ = m.Update(navigationKey("pgup"))
+						m = updated.(model)
+						if m.selected != 0 {
+							t.Fatal("Home/page up passed first entry")
+						}
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestAnalyzerPageNavigationEmptyAndConfirmation(t *testing.T) {
+	for _, count := range []int{0, 1, 3} {
+		m := newModel("fixture")
+		m.scanning = false
+		for i := 0; i < count; i++ {
+			m.entries = append(m.entries, dirEntry{Name: fmt.Sprint(i)})
+		}
+		for _, key := range []string{"pgdown", "pgup", "end", "home"} {
+			updated, command := m.Update(navigationKey(key))
+			m = updated.(model)
+			want := 0
+			if key == "pgdown" || key == "end" {
+				want = max(0, count-1)
+			}
+			if command != nil || m.selected != want {
+				t.Fatalf("%s with %d entries selected %d, want %d", key, count, m.selected, want)
+			}
+		}
+		m.deleteConfirm = true
+		m.deleteTarget = "fixture/keep"
+		for _, key := range []string{"pgdown", "pgup", "end", "home"} {
+			updated, command := m.Update(navigationKey(key))
+			if command != nil || !reflect.DeepEqual(updated.(model), m) {
+				t.Fatalf("%s changed pending confirmation", key)
+			}
+		}
 	}
 }
