@@ -331,6 +331,15 @@ func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.selected < len(m.entries)-1 {
 			m.selected++
 		}
+	case "pgup", "pgdown":
+		width, height := m.viewSize()
+		// The total occupies one row regardless of its text or partial markers.
+		_, _, pageSize := m.listingLayout(width, height, "")
+		if msg.String() == "pgup" {
+			m.selected = max(0, m.selected-pageSize)
+		} else {
+			m.selected = min(max(0, len(m.entries)-1), m.selected+pageSize)
+		}
 	case "enter", "right", "l":
 		if !m.scanning && len(m.entries) > 0 {
 			entry := m.entries[m.selected]
@@ -419,9 +428,9 @@ func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			entry := m.entries[m.selected]
 			openInExplorer(entry.Path)
 		}
-	case "g":
+	case "g", "home":
 		m.selected = 0
-	case "G":
+	case "G", "end":
 		if len(m.entries) > 0 {
 			m.selected = len(m.entries) - 1
 		}
@@ -463,63 +472,19 @@ func (m model) View() string {
 		return ansi.Truncate("Resize to 40x9 or larger; q quits", width, "")
 	}
 
-	lines := []string{
-		colorPurpleBold + iconDisk + " WinMole Disk Analyzer" + colorReset,
-		colorGray + truncatePath(m.path, width) + colorReset,
-		"",
-	}
-	if m.scanning {
-		lines = append(lines, colorCyan+"⠋ Scanning..."+colorReset)
-		if m.scanTotal > 0 {
-			lines = append(lines, ansi.Truncate(fmt.Sprintf("  %d / %d items", m.scanProgress, m.scanTotal), width, "..."))
-		}
-		return strings.Join(append(lines, "q quit"), "\n")
-	}
-
-	footer := "↑↓ navigate  ↵ enter  ← back  f files  d delete  r refresh  q quit"
-	if ansi.StringWidth(footer) > width {
-		footer = "↑↓ navigate  ↵ enter  ← back\nf files  d delete  r refresh  q quit"
-	}
-	footerRows := strings.Count(footer, "\n") + 1
-	if m.err != nil {
-		// Keep retry controls and at least one entry visible after an operation error.
-		errorRows := max(1, height-len(lines)-footerRows-4)
-		errorLines := strings.Split(ansi.Wrap("Error: "+m.err.Error(), width, ""), "\n")
-		if len(errorLines) > errorRows {
-			errorLines = errorLines[:errorRows]
-			errorLines[errorRows-1] = ansi.Truncate(errorLines[errorRows-1], width-3, "") + "..."
-		}
-		lines = append(lines, colorRed+strings.Join(errorLines, "\n")+colorReset)
-	}
-
 	total := formatBytes(m.totalSize)
-	for _, entry := range m.entries {
-		if entry.Partial {
-			total = "≥ " + total + " (+ = partial)"
-			break
+	if !m.scanning {
+		for _, entry := range m.entries {
+			if entry.Partial {
+				total = "≥ " + total + " (+ = partial)"
+				break
+			}
 		}
 	}
-	lines = append(lines, "  Total: "+colorYellow+total+colorReset)
-	// Count rendered rows because wrapped errors occupy multiple lines.
-	available := height - strings.Count(strings.Join(lines, "\n"), "\n") - 1 - footerRows - 1
-	if m.showLargeFiles && len(m.largeFiles) > 0 && available > 1 {
-		// Share the remaining height with the directory list; always reserve a selected row.
-		panelRows := min(12, available/2)
-		if panelRows >= 3 {
-			count := min(len(m.largeFiles), panelRows-2)
-			lines = append(lines, colorCyanBold+"Large Files (>100MB):"+colorReset)
-			for _, file := range m.largeFiles[:count] {
-				prefix := "  " + formatBytes(file.Size) + " "
-				lines = append(lines, colorYellow+strings.TrimSuffix(prefix, " ")+colorReset+" "+truncatePath(file.Path, min(60, width-ansi.StringWidth(prefix))))
-			}
-			if count < len(m.largeFiles) {
-				lines = append(lines, fmt.Sprintf("  ... and %d more", len(m.largeFiles)-count))
-			}
-		} else {
-			lines = append(lines, ansi.Truncate(fmt.Sprintf("Large files: %d (resize to show)", len(m.largeFiles)), width, "..."))
-		}
+	lines, footer, visibleEntries := m.listingLayout(width, height, total)
+	if m.scanning {
+		return strings.Join(append(lines, footer), "\n")
 	}
-	visibleEntries := max(1, height-strings.Count(strings.Join(lines, "\n"), "\n")-1-footerRows-1)
 	start := max(0, m.selected-visibleEntries+1)
 	for i := start; i < len(m.entries) && i < start+visibleEntries; i++ {
 		entry := m.entries[i]
@@ -560,6 +525,61 @@ func (m model) View() string {
 		lines = append(lines, prefix+nameColor+truncatePath(entry.Name, width-ansi.StringWidth(prefix))+colorReset)
 	}
 	return strings.Join(append(lines, "", footer), "\n")
+}
+
+// listingLayout shares the rendered row budget with keyboard paging.
+func (m model) listingLayout(width, height int, total string) ([]string, string, int) {
+	lines := []string{
+		colorPurpleBold + iconDisk + " WinMole Disk Analyzer" + colorReset,
+		colorGray + truncatePath(m.path, width) + colorReset,
+		"",
+	}
+	if m.scanning {
+		lines = append(lines, colorCyan+"⠋ Scanning..."+colorReset)
+		if m.scanTotal > 0 {
+			lines = append(lines, ansi.Truncate(fmt.Sprintf("  %d / %d items", m.scanProgress, m.scanTotal), width, "..."))
+		}
+		return lines, "q quit", 0
+	}
+
+	footer := "↑↓ navigate  ↵ enter  ← back  f files  d delete  r refresh  q quit"
+	if ansi.StringWidth(footer) > width {
+		footer = "↑↓ navigate  ↵ enter  ← back\nf files  d delete  r refresh  q quit"
+	}
+	footerRows := strings.Count(footer, "\n") + 1
+	if m.err != nil {
+		// Keep retry controls and at least one entry visible after an operation error.
+		errorRows := max(1, height-len(lines)-footerRows-4)
+		errorLines := strings.Split(ansi.Wrap("Error: "+m.err.Error(), width, ""), "\n")
+		if len(errorLines) > errorRows {
+			errorLines = errorLines[:errorRows]
+			errorLines[errorRows-1] = ansi.Truncate(errorLines[errorRows-1], width-3, "") + "..."
+		}
+		lines = append(lines, colorRed+strings.Join(errorLines, "\n")+colorReset)
+	}
+
+	lines = append(lines, "  Total: "+colorYellow+total+colorReset)
+	// Count rendered rows because wrapped errors occupy multiple lines.
+	available := height - strings.Count(strings.Join(lines, "\n"), "\n") - 1 - footerRows - 1
+	if m.showLargeFiles && len(m.largeFiles) > 0 && available > 1 {
+		// Share the remaining height with the directory list; always reserve a selected row.
+		panelRows := min(12, available/2)
+		if panelRows >= 3 {
+			count := min(len(m.largeFiles), panelRows-2)
+			lines = append(lines, colorCyanBold+"Large Files (>100MB):"+colorReset)
+			for _, file := range m.largeFiles[:count] {
+				prefix := "  " + formatBytes(file.Size) + " "
+				lines = append(lines, colorYellow+strings.TrimSuffix(prefix, " ")+colorReset+" "+truncatePath(file.Path, min(60, width-ansi.StringWidth(prefix))))
+			}
+			if count < len(m.largeFiles) {
+				lines = append(lines, fmt.Sprintf("  ... and %d more", len(m.largeFiles)-count))
+			}
+		} else {
+			lines = append(lines, ansi.Truncate(fmt.Sprintf("Large files: %d (resize to show)", len(m.largeFiles)), width, "..."))
+		}
+	}
+	visibleEntries := max(1, height-strings.Count(strings.Join(lines, "\n"), "\n")-1-footerRows-1)
+	return lines, footer, visibleEntries
 }
 
 // scanPath scans a directory and returns entries

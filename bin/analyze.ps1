@@ -52,6 +52,8 @@ function Show-AnalyzeHelp {
     Write-Host ""
     Write-Host "    ${cyan}Up/k${nc}    Move up"
     Write-Host "    ${cyan}Down/j${nc}  Move down"
+    Write-Host "    ${cyan}PgUp/PgDn${nc} Move one visible listing page"
+    Write-Host "    ${cyan}Home/End${nc} Jump to the first/last entry (also g/G)"
     Write-Host "    ${cyan}Enter${nc}   Expand/collapse directory"
     Write-Host "    ${cyan}Backspace${nc} Go to parent directory"
     Write-Host "    ${cyan}r${nc}       Refresh"

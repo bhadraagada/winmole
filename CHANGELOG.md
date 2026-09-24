@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The status dashboard now wraps to the terminal width and scrolls with arrow
   keys, `j`/`k`, `PgUp`/`PgDn`, and `Home`/`End`, keeping controls visible in short
   windows and preserving access to long health warnings and lower sections.
+- The disk analyzer supports `PgUp`/`PgDn` paging by the visible listing height
+  and `Home`/`End` to jump to the first or last entry.
 
 ### Fixed
 

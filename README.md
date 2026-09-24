@@ -106,6 +106,11 @@ starting directory, the same keys scan its parent, so you can explore above the
 path you launched with. While a scan runs, wait for it to finish or press `q` or
 `Ctrl+C` to quit.
 
+Use `PgUp`/`PgDn` to move one visible listing page and `Home`/`End` to jump to
+the first or last entry. The `g`/`G` shortcuts also jump to the first or last
+entry. Page size follows the terminal height and the space used by the
+large-files panel or error messages.
+
 The analyzer fits the listing to the terminal, keeping the selected entry, its
 size, and navigation controls visible. Long names and paths retain their suffix;
 usage bars shrink first. The `f` large-files panel shares the available rows with
