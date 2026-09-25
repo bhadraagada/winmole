@@ -52,6 +52,8 @@ function Show-AnalyzeHelp {
     Write-Host ""
     Write-Host "    ${cyan}Up/k${nc}    Move up"
     Write-Host "    ${cyan}Down/j${nc}  Move down"
+    Write-Host "    ${cyan}PgUp/PgDn${nc} Move one visible listing page"
+    Write-Host "    ${cyan}Home/End${nc} Jump to the first/last entry (also g/G)"
     Write-Host "    ${cyan}Enter${nc}   Expand/collapse directory"
     Write-Host "    ${cyan}Backspace${nc} Go to parent directory"
     Write-Host "    ${cyan}r${nc}       Refresh"
@@ -142,6 +144,14 @@ function Invoke-AnalyzeTool {
             Where-Object { $_.LastWriteTime -gt $binaryTime }).Count -gt 0
     }
     
+    # Dependency-only updates must also invalidate a source checkout's binary.
+    if (-not $needsBuild -and (Test-Path -LiteralPath $srcPath)) {
+        $binaryTime = (Get-Item -LiteralPath $binaryPath).LastWriteTime
+        $needsBuild = @(Get-Item -LiteralPath (Join-Path $script:WINMOLE_ROOT 'go.mod'),
+            (Join-Path $script:WINMOLE_ROOT 'go.sum') -ErrorAction SilentlyContinue |
+            Where-Object { $_.LastWriteTime -gt $binaryTime }).Count -gt 0
+    }
+
     if ($needsBuild) {
         if (-not (Build-AnalyzeTool)) {
             throw 'Unable to build disk analyzer.'

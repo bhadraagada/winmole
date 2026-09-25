@@ -17,6 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The status dashboard now displays free space beside each drive's usage bar.
 - Press `m` in the status dashboard to switch the top five processes between
   CPU and memory usage, including memory-heavy processes outside the CPU top five.
+- The status dashboard now wraps to the terminal width and scrolls with arrow
+  keys, `j`/`k`, `PgUp`/`PgDn`, and `Home`/`End`, keeping controls visible in short
+  windows and preserving access to long health warnings and lower sections.
+- The disk analyzer supports `PgUp`/`PgDn` paging by the visible listing height
+  and `Home`/`End` to jump to the first or last entry.
+- `winmole status -Json` and `status.exe -json` export a single read-only
+  CPU, memory, swap, disk, and health snapshot without an interactive terminal.
+  Unavailable numeric readings are `null`, with explicit availability flags.
 
 ### Fixed
 
@@ -38,6 +46,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First-time analyzer, status, and script builds now tolerate Go download progress
   on stderr in Windows PowerShell 5.1. Build failures still show diagnostics, and
   analyzer and status commands exit with failure when compilation fails.
+- Failed CPU, RAM, swap, and disk readings now show as unavailable instead of
+  zero usage. Incomplete readings withhold the health score while retaining
+  known resource warnings; successful refreshes restore normal reporting.
+- The disk analyzer now keeps its selected entry, sizes, and controls visible
+  in short and narrow terminals. Bars shrink, long Unicode names retain their
+  suffix, and the large-files panel shares the available rows. Delete prompts
+  require enough space to display the full target before accepting confirmation.
+- Analyzer and status launchers rebuild source checkouts when `go.mod` or
+  `go.sum` is newer than the binary, applying dependency-only updates.
 
 ## [0.1.1] - 2026-07-31
 

@@ -106,6 +106,18 @@ starting directory, the same keys scan its parent, so you can explore above the
 path you launched with. While a scan runs, wait for it to finish or press `q` or
 `Ctrl+C` to quit.
 
+Use `PgUp`/`PgDn` to move one visible listing page and `Home`/`End` to jump to
+the first or last entry. The `g`/`G` shortcuts also jump to the first or last
+entry. Page size follows the terminal height and the space used by the
+large-files panel or error messages.
+
+The analyzer fits the listing to the terminal, keeping the selected entry, its
+size, and navigation controls visible. Long names and paths retain their suffix;
+usage bars shrink first. The `f` large-files panel shares the available rows with
+the listing and reports how many files are hidden. Enlarge windows smaller than
+40 columns by 9 rows to browse. A delete confirmation displays its full target;
+if it cannot fit, resize before confirming or press `n`/`Esc` to cancel.
+
 ### Save a disk usage report
 
 ```powershell
@@ -153,9 +165,45 @@ Free    156.3 GB / 476.9 GB              Up      ▮▯▯▯▯  0.8 MB/s
 
 Press `m` in the status dashboard to switch the top five processes between CPU
 and memory usage. CPU is the default; the process heading shows the active sort.
+Use `Up`/`Down` or `k`/`j` to scroll, `PgUp`/`PgDn` to move a page, and
+`Home`/`End` to jump to the first or last row. The dashboard wraps to the terminal
+width and keeps its controls visible, so lower sections and long health warnings
+remain reachable in a short window. Very small windows show compact controls;
+enlarge a one-column or one-row window to read metrics.
 
 Each drive shows its used and total capacity, usage percentage, and free space
 beside the usage bar. Free space updates with each metrics refresh.
+
+If CPU, RAM, swap, or a drive cannot be read, its reading shows as unavailable.
+The health score is withheld until all its inputs are available; warnings from
+readable metrics still appear. A successful refresh restores the readings and
+score. An idle CPU and a system with no swap remain valid readings.
+
+### Save a system health report
+
+```powershell
+# Collect one read-only snapshot without opening the dashboard
+.\winmole.ps1 status -Json | Set-Content -Encoding UTF8 status.json
+$status = Get-Content -Raw status.json | ConvertFrom-Json
+$status.health
+$status.disks | Select-Object device, free_bytes, available
+
+# Standalone binary
+.\bin\status.exe -json
+```
+
+The report contains `collected_at`, `health`, `cpu`, `memory`, `swap`,
+`disks_complete`, and `disks`. Percentages use a 0–100 scale; capacities are in
+bytes. Each measurement group has an `available` flag. Unavailable numeric
+readings are `null`, including `health.score` when any health input is missing.
+Valid zero readings remain numeric zero. `health.message` retains warnings
+from the measurements that could be read.
+
+`disks_complete` describes drive enumeration; check each disk's `available`
+flag as well. An empty drive list is `[]`. Network rates and process lists are
+not included in this snapshot. Collection uses the dashboard's existing
+collector and timeout. Missing measurements still produce a report; command
+or output failures return a nonzero exit code with diagnostics on stderr.
 
 ### Developer Artifact Purge
 

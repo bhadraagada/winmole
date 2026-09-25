@@ -4,6 +4,7 @@
 
 #Requires -Version 5.1
 param(
+    [switch]$Json,
     [switch]$Help
 )
 
@@ -36,6 +37,7 @@ function Show-StatusHelp {
     Write-Host "  ${green}USAGE:${nc}"
     Write-Host ""
     Write-Host "    winmole status"
+    Write-Host "    winmole status -Json    # One CPU, memory, swap, disk and health snapshot"
     Write-Host ""
     Write-Host "  ${green}DISPLAYS:${nc}"
     Write-Host ""
@@ -47,6 +49,9 @@ function Show-StatusHelp {
     Write-Host ""
     Write-Host "  ${green}CONTROLS:${nc}"
     Write-Host ""
+    Write-Host "    ${cyan}Up/Down,j/k${nc} Scroll the dashboard"
+    Write-Host "    ${cyan}PgUp/PgDn${nc}  Scroll one page"
+    Write-Host "    ${cyan}Home/End${nc}   Jump to the top/bottom"
     Write-Host "    ${cyan}m${nc}          Toggle process sorting: CPU/memory"
     Write-Host "    ${cyan}c${nc}          Toggle WinMole animation"
     Write-Host "    ${cyan}r${nc}          Refresh now"
@@ -72,15 +77,12 @@ function Build-StatusTool {
     $srcPath = Join-Path $script:WINMOLE_CMD "status"
     $binaryPath = Get-GoBinaryPath
     
-    Write-Info "Building system monitor..."
+    [Console]::Error.WriteLine('Building system monitor...')
     
     # Check if Go is installed
     $goCmd = Get-Command "go" -ErrorAction SilentlyContinue
     if (-not $goCmd) {
-        Write-WinMoleError "Go is not installed or not in PATH"
-        Write-Host ""
-        Write-Host "  Install Go from: https://go.dev/dl/"
-        Write-Host ""
+        [Console]::Error.WriteLine('Go is not installed or not in PATH. Install Go from: https://go.dev/dl/')
         return $false
     }
     
@@ -90,10 +92,10 @@ function Build-StatusTool {
         
         # Download dependencies if needed
         if (-not (Test-Path (Join-Path $script:WINMOLE_ROOT "go.sum"))) {
-            Write-Info "Downloading dependencies..."
+            [Console]::Error.WriteLine('Downloading dependencies...')
             & go mod tidy | Out-Null
             if ($LASTEXITCODE -ne 0) {
-                Write-WinMoleError 'Dependency setup failed.'
+                [Console]::Error.WriteLine('Dependency setup failed.')
                 return $false
             }
         }
@@ -103,15 +105,15 @@ function Build-StatusTool {
         $buildOutput = & go build -ldflags="-s -w" -o $binaryPath .
         
         if ($LASTEXITCODE -ne 0) {
-            Write-WinMoleError "Build failed: $buildOutput"
+            [Console]::Error.WriteLine("Build failed: $buildOutput")
             return $false
         }
         
-        Write-Success "Build complete"
+        [Console]::Error.WriteLine('Build complete')
         return $true
     }
     catch {
-        Write-WinMoleError "Build failed: $_"
+        [Console]::Error.WriteLine("Build failed: $_")
         return $false
     }
     finally {
@@ -123,17 +125,26 @@ function Invoke-StatusTool {
     $binaryPath = Get-GoBinaryPath
     
     # Build if binary doesn't exist or source is newer
-    $srcPath = Join-Path $script:WINMOLE_CMD "status\main.go"
+    $srcPath = Join-Path $script:WINMOLE_CMD 'status'
     $needsBuild = $false
     
     if (-not (Test-Path $binaryPath)) {
         $needsBuild = $true
     }
-    elseif ((Test-Path -LiteralPath $srcPath) -and
-        (Get-Item -LiteralPath $srcPath).LastWriteTime -gt (Get-Item -LiteralPath $binaryPath).LastWriteTime) {
-        $needsBuild = $true
+    elseif (Test-Path -LiteralPath $srcPath) {
+        $binaryTime = (Get-Item -LiteralPath $binaryPath).LastWriteTime
+        $needsBuild = @(Get-ChildItem -LiteralPath $srcPath -Filter '*.go' -File |
+            Where-Object { $_.LastWriteTime -gt $binaryTime }).Count -gt 0
     }
     
+    # Dependency-only updates must also invalidate a source checkout's binary.
+    if (-not $needsBuild -and (Test-Path -LiteralPath $srcPath)) {
+        $binaryTime = (Get-Item -LiteralPath $binaryPath).LastWriteTime
+        $needsBuild = @(Get-Item -LiteralPath (Join-Path $script:WINMOLE_ROOT 'go.mod'),
+            (Join-Path $script:WINMOLE_ROOT 'go.sum') -ErrorAction SilentlyContinue |
+            Where-Object { $_.LastWriteTime -gt $binaryTime }).Count -gt 0
+    }
+
     if ($needsBuild) {
         if (-not (Build-StatusTool)) {
             throw 'Unable to build system monitor.'
@@ -141,7 +152,12 @@ function Invoke-StatusTool {
     }
     
     # Run the monitor
-    & $binaryPath
+    $statusArgs = @()
+    if ($Json) { $statusArgs += '-json' }
+    & $binaryPath @statusArgs
+    if ($Json -and $LASTEXITCODE -ne 0) {
+        throw "System monitor failed with exit code $LASTEXITCODE."
+    }
 }
 
 # ============================================================================
@@ -150,7 +166,7 @@ function Invoke-StatusTool {
 
 function Main {
     # Initialize
-    Initialize-WinMole
+    if (-not $Json) { Initialize-WinMole }
     
     if ($Help) {
         Show-StatusHelp
@@ -166,6 +182,7 @@ try {
     Main
 }
 catch {
+    if ($Json) { throw }
     Write-Host ""
     Write-WinMoleError "An error occurred: $_"
     Write-Host ""

@@ -74,6 +74,39 @@ exit /b 0
             & "Build-$($Name)Tool" | Should -BeTrue
         }
 
+        It 'rebuilds only for newer metadata when <ModuleFile> is <Age>' -ForEach @(
+            @{ ModuleFile = 'go.mod'; Age = 'newer'; Days = 1 },
+            @{ ModuleFile = 'go.sum'; Age = 'newer'; Days = 1 },
+            @{ ModuleFile = 'go.mod'; Age = 'older'; Days = -1 },
+            @{ ModuleFile = 'go.sum'; Age = 'older'; Days = -1 },
+            @{ ModuleFile = 'go.mod'; Age = 'equal'; Days = 0 },
+            @{ ModuleFile = 'go.sum'; Age = 'equal'; Days = 0 },
+            @{ ModuleFile = 'go.mod'; Age = 'missing'; Days = $null },
+            @{ ModuleFile = 'go.sum'; Age = 'missing'; Days = $null }
+        ) {
+            $script:Json = $false
+            Mock Get-GoBinaryPath { Join-Path $script:BIN_DIR 'launch.cmd' }
+            Mock "Build-$($Name)Tool" { $true }
+            $binaryPath = Get-GoBinaryPath
+            Set-Content -LiteralPath $binaryPath -Value "@echo off`r`nexit /b 0"
+            $binaryTime = [datetime]'2020-01-02'
+            (Get-Item -LiteralPath $binaryPath).LastWriteTime = $binaryTime
+            $sourcePath = Join-Path $script:CMD_DIR "$Name\main.go"
+            foreach ($filePath in @($sourcePath, (Join-Path $script:Fixture 'go.mod'), (Join-Path $script:Fixture 'go.sum'))) {
+                if ($Age -eq 'missing' -and (Split-Path -Leaf $filePath) -eq $ModuleFile) { continue }
+                Set-Content -LiteralPath $filePath -Value 'fixture'
+                (Get-Item -LiteralPath $filePath).LastWriteTime = $binaryTime.AddDays(-1)
+            }
+            if ($Age -ne 'missing') {
+                (Get-Item -LiteralPath (Join-Path $script:Fixture $ModuleFile)).LastWriteTime = $binaryTime.AddDays($Days)
+            }
+
+            & "Invoke-$($Name)Tool"
+
+            Should -Invoke "Build-$($Name)Tool" -Exactly -Times ([int]($Age -eq 'newer'))
+            $LASTEXITCODE | Should -Be 0
+        }
+
         It 'rejects a nonzero build and prevents the launcher from reporting success' {
             Set-Content -LiteralPath (Join-Path $script:Fixture 'go.sum') -Value ''
             Set-Content -LiteralPath $script:GoExe -Value "@echo off`r`necho fixture compilation failed 1>&2`r`nexit /b 7"
@@ -124,14 +157,17 @@ function Write-WinMoleError { param($Message) Write-Host $Message }
         }
     }
 
-    It 'keeps JSON stdout empty when analyzer dependency setup fails' {
+    It 'keeps JSON stdout empty when <Name> dependency setup fails' -ForEach @(
+        @{ Name = 'analyze' }, @{ Name = 'status' }
+    ) {
         Set-Content -LiteralPath $script:GoExe -Value "@echo off`r`necho fixture dependency setup failed 1>&2`r`nexit /b 7"
         $core = New-Item -ItemType Directory -Path (Join-Path $script:Fixture 'lib\core')
         Set-Content -LiteralPath (Join-Path $core.FullName 'common.ps1') -Value 'function Restore-WinMoleConsoleEncoding { }'
-        $entryPoint = Join-Path $script:BIN_DIR 'analyze.ps1'
-        Copy-Item -LiteralPath (Join-Path $script:RepoRoot 'bin\analyze.ps1') -Destination $entryPoint
+        $entryPoint = Join-Path $script:BIN_DIR "$Name.ps1"
+        Copy-Item -LiteralPath (Join-Path $script:RepoRoot "bin\$Name.ps1") -Destination $entryPoint
         $shell = if ($PSVersionTable.PSEdition -eq 'Desktop') { 'powershell.exe' } else { 'pwsh.exe' }
-        $commandArguments = @('-NoProfile', '-NonInteractive', '-File', "`"$entryPoint`"", '-Path', "`"$script:Fixture`"", '-Json')
+        $commandArguments = @('-NoProfile', '-NonInteractive', '-File', "`"$entryPoint`"", '-Json')
+        if ($Name -eq 'analyze') { $commandArguments += @('-Path', "`"$script:Fixture`"") }
         $stderrPath = Join-Path $script:Fixture 'stderr.txt'
         $stdoutPath = Join-Path $script:Fixture 'stdout.txt'
         $process = Start-Process -FilePath (Join-Path $PSHOME $shell) -ArgumentList $commandArguments `
@@ -140,7 +176,7 @@ function Write-WinMoleError { param($Message) Write-Host $Message }
         Get-Content -LiteralPath $stdoutPath -Raw | Should -BeNullOrEmpty
         Get-Content -LiteralPath $stderrPath -Raw | Should -Match 'fixture dependency setup failed'
         Get-Content -LiteralPath $stderrPath -Raw | Should -Match 'Dependency setup failed\.'
-        Test-Path -LiteralPath (Join-Path $script:BIN_DIR 'analyze.exe') | Should -BeFalse
+        Test-Path -LiteralPath (Join-Path $script:BIN_DIR "$Name.exe") | Should -BeFalse
     }
 
     Context 'Build script' {
