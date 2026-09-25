@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"runtime"
@@ -776,6 +777,19 @@ func truncateString(s string, maxLen int) string {
 }
 
 func main() {
+	jsonOutput := flag.Bool("json", false, "Print one read-only JSON health snapshot and exit")
+	flag.Parse()
+	if flag.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "status does not accept positional arguments")
+		os.Exit(2)
+	}
+	if *jsonOutput {
+		if err := writeJSONReport(os.Stdout, NewCollector().Collect()); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
 	p := tea.NewProgram(newModel(), tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)

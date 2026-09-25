@@ -175,6 +175,32 @@ The health score is withheld until all its inputs are available; warnings from
 readable metrics still appear. A successful refresh restores the readings and
 score. An idle CPU and a system with no swap remain valid readings.
 
+### Save a system health report
+
+```powershell
+# Collect one read-only snapshot without opening the dashboard
+.\winmole.ps1 status -Json | Set-Content -Encoding UTF8 status.json
+$status = Get-Content -Raw status.json | ConvertFrom-Json
+$status.health
+$status.disks | Select-Object device, free_bytes, available
+
+# Standalone binary
+.\bin\status.exe -json
+```
+
+The report contains `collected_at`, `health`, `cpu`, `memory`, `swap`,
+`disks_complete`, and `disks`. Percentages use a 0–100 scale; capacities are in
+bytes. Each measurement group has an `available` flag. Unavailable numeric
+readings are `null`, including `health.score` when any health input is missing.
+Valid zero readings remain numeric zero. `health.message` retains warnings
+from the measurements that could be read.
+
+`disks_complete` describes drive enumeration; check each disk's `available`
+flag as well. An empty drive list is `[]`. Network rates and process lists are
+not included in this snapshot. Collection uses the dashboard's existing
+collector and timeout. Missing measurements still produce a report; command
+or output failures return a nonzero exit code with diagnostics on stderr.
+
 ### Developer Artifact Purge
 
 ```powershell
