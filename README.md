@@ -250,7 +250,6 @@ Select Categories to Clean - 18.5 GB (8 selected)
 Configuration files are stored in `~\.config\winmole\`:
 
 - `whitelist` - Paths to never clean (one per line)
-- `config.json` - General settings
 
 ### Whitelist Example
 

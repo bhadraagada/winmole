@@ -18,11 +18,11 @@ Set-StrictMode -Version Latest
 # Force UTF-8 console output so the banner renders correctly on CJK Windows
 # (PowerShell 5.1 defaults to the ANSI/OEM codepage, e.g. CP949).
 # Save the previous encodings so they can be restored on exit.
-$script:WinMoleOriginalConsoleOutputEncoding = $null
-$script:WinMoleOriginalOutputEncoding = $null
+$script:InstallerOriginalConsoleOutputEncoding = $null
+$script:InstallerOriginalOutputEncoding = $null
 try {
-    $script:WinMoleOriginalConsoleOutputEncoding = [Console]::OutputEncoding
-    $script:WinMoleOriginalOutputEncoding = $global:OutputEncoding
+    $script:InstallerOriginalConsoleOutputEncoding = [Console]::OutputEncoding
+    $script:InstallerOriginalOutputEncoding = $global:OutputEncoding
     [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
     $global:OutputEncoding = [System.Text.Encoding]::UTF8
 }
@@ -35,6 +35,8 @@ catch { }
 $script:VERSION = "0.1.1"
 $script:SourceDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $script:ShortcutName = "WinMole"
+. "$script:SourceDir\lib\core\file_ops.ps1"
+$script:DryRun = $false
 
 # Colors
 $script:ESC = [char]27
@@ -220,17 +222,21 @@ function Remove-StartMenuShortcut {
     $shortcutPath = Join-Path $programsPath "$ShortcutName.lnk"
     
     if (Test-Path $shortcutPath) {
-        try {
-            Remove-Item $shortcutPath -Force
-            Write-Success "Removed shortcut: $shortcutPath"
-            return $true
-        }
-        catch {
-            Write-Error "Failed to remove shortcut: $_"
+        return (Remove-SafeItem -Path $shortcutPath -Force -Description "Start Menu shortcut")
+    }
+
+    return $true
+}
+
+function Test-WinMoleInstallation {
+    param([string]$Path)
+
+    foreach ($relativePath in @("winmole.ps1", "winmole.cmd", "bin\clean.ps1", "lib\core\base.ps1")) {
+        if (-not (Test-Path -LiteralPath (Join-Path $Path $relativePath) -PathType Leaf)) {
             return $false
         }
     }
-    
+
     return $true
 }
 
@@ -241,18 +247,34 @@ function Remove-StartMenuShortcut {
 function Install-WinMole {
     Write-Info "Installing WinMole v$script:VERSION..."
     Write-Host ""
+
+    $resolvedInstallDir = Resolve-SafePath -Path $InstallDir
+    if (-not $resolvedInstallDir -or
+        (Test-ProtectedPath -Path $resolvedInstallDir) -or
+        (Test-Whitelisted -Path $resolvedInstallDir)) {
+        Write-Error "Refusing to install into a protected or whitelisted directory: $InstallDir"
+        return $false
+    }
+    $InstallDir = $resolvedInstallDir
     
     # Check if already installed
-    if ((Test-Path $InstallDir) -and -not $Force) {
+    if ((Test-Path -LiteralPath $InstallDir) -and -not $Force) {
         Write-Error "WinMole is already installed at: $InstallDir"
         Write-Host ""
         Write-Host "  Use -Force to overwrite or -Uninstall to remove first"
         Write-Host ""
         return $false
     }
+
+    if ((Test-Path -LiteralPath $InstallDir) -and
+        @(Get-ChildItem -LiteralPath $InstallDir -Force -ErrorAction SilentlyContinue).Count -gt 0 -and
+        -not (Test-WinMoleInstallation -Path $InstallDir)) {
+        Write-Error "Refusing to overwrite a directory that is not a WinMole installation: $InstallDir"
+        return $false
+    }
     
     # Create install directory
-    if (-not (Test-Path $InstallDir)) {
+    if (-not (Test-Path -LiteralPath $InstallDir)) {
         try {
             New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
             Write-Success "Created directory: $InstallDir"
@@ -358,12 +380,21 @@ function Uninstall-WinMole {
     Write-Host ""
     
     # Check for existing installation
-    $configPath = Join-Path $env:LOCALAPPDATA "WinMole"
-    $installPath = if (Test-Path $InstallDir) { $InstallDir } elseif (Test-Path $configPath) { $configPath } else { $null }
+    $installPath = if (Test-Path -LiteralPath $InstallDir) { Resolve-SafePath -Path $InstallDir } else { $null }
     
     if (-not $installPath) {
         Write-Warning "WinMole is not installed"
         return $true
+    }
+
+    if ((Test-ProtectedPath -Path $installPath) -or (Test-Whitelisted -Path $installPath)) {
+        Write-Error "Refusing to remove a protected or whitelisted directory: $installPath"
+        return $false
+    }
+
+    if (-not (Test-WinMoleInstallation -Path $installPath)) {
+        Write-Error "Refusing to remove a directory that is not a WinMole installation: $installPath"
+        return $false
     }
     
     # Remove from PATH
@@ -373,12 +404,8 @@ function Uninstall-WinMole {
     Remove-StartMenuShortcut -ShortcutName $script:ShortcutName
     
     # Remove installation directory
-    try {
-        Remove-Item -Path $installPath -Recurse -Force
-        Write-Success "Removed directory: $installPath"
-    }
-    catch {
-        Write-Error "Failed to remove directory: $_"
+    if (-not (Remove-SafeItem -Path $installPath -Recurse -Force -Description "WinMole installation")) {
+        Write-Error "Failed to remove directory: $installPath"
         return $false
     }
     
@@ -388,12 +415,8 @@ function Uninstall-WinMole {
         Write-Info "Found config directory: $configDir"
         $response = Read-Host "  Remove config files? (y/N)"
         if ($response -eq "y" -or $response -eq "Y") {
-            try {
-                Remove-Item -Path $configDir -Recurse -Force
-                Write-Success "Removed config: $configDir"
-            }
-            catch {
-                Write-Warning "Failed to remove config: $_"
+            if (-not (Remove-SafeItem -Path $configDir -Recurse -Force -Description "WinMole config")) {
+                Write-Warning "Failed to remove config: $configDir"
             }
         }
     }
@@ -436,11 +459,11 @@ catch {
 }
 finally {
     try {
-        if ($null -ne $script:WinMoleOriginalConsoleOutputEncoding) {
-            [Console]::OutputEncoding = $script:WinMoleOriginalConsoleOutputEncoding
+        if ($null -ne $script:InstallerOriginalConsoleOutputEncoding) {
+            [Console]::OutputEncoding = $script:InstallerOriginalConsoleOutputEncoding
         }
-        if ($null -ne $script:WinMoleOriginalOutputEncoding) {
-            $global:OutputEncoding = $script:WinMoleOriginalOutputEncoding
+        if ($null -ne $script:InstallerOriginalOutputEncoding) {
+            $global:OutputEncoding = $script:InstallerOriginalOutputEncoding
         }
     }
     catch { }

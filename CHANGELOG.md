@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Future releases include a `SHA256SUMS` file for the ZIP archives. (#29)
 - `winmole analyze [path] -Json` and `analyze.exe -json` produce read-only,
   machine-readable disk usage reports with byte counts and partial-scan flags.
   Reports work without an interactive terminal and preserve literal paths.
@@ -28,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `clean` no longer scans all of LocalAppData for empty directories or prints
+  internal return values during a dry run. (#39)
+- The installer refuses to overwrite or uninstall an unrecognized directory and
+  routes uninstall deletion through the shared path protections.
 - The analyzer marks files it cannot stat as partial instead of reporting
   an apparently complete zero-byte measurement.
 - Analyzer input during a scan can no longer replace a parent listing with a
@@ -113,12 +118,6 @@ First tagged release.
 - A Pester regression test for `Get-InstalledPrograms` under StrictMode. (#11)
 - Go test coverage for the disk analyzer, one case per root cause above plus a
   test pinning that protected system paths still refuse deletion. (#15)
-
-### Known issues
-
-- Progress bars in `purge` and `uninstall` are stuck at 0%, because a helper in
-  `lib/core/log.ps1` shadows the built-in `Write-Progress` with an incompatible
-  signature. (#18)
 
 [0.1.1]: https://github.com/bhadraagada/winmole/releases/tag/v0.1.1
 [0.1.0]: https://github.com/bhadraagada/winmole/releases/tag/v0.1.0
