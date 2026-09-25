@@ -25,19 +25,21 @@ jobs:
           Import-Module Pester -MinimumVersion 5.0
           "PESTER_MANIFEST=$((Get-Module Pester).ModuleBase)/Pester.psd1" >> $env:GITHUB_ENV
 
-      - name: Test Go builds in Windows PowerShell 5.1
+      - name: Set up Go for command tests
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: '1.24'
+
+      - name: Run Pester Tests in Windows PowerShell 5.1
         shell: powershell
         run: |
           Import-Module $env:PESTER_MANIFEST
           $config = New-PesterConfiguration
-          $config.Run.Path = "./tests/GoBuild.Tests.ps1"
+          $config.Run.Path = "./tests"
           $config.Run.Exit = $true
+          $config.Filter.ExcludeTag = @("Integration")
+          $config.Output.Verbosity = "Detailed"
           Invoke-Pester -Configuration $config
-
-      - name: Set up Go for analyzer command tests
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        with:
-          go-version: '1.24'
 
       - name: Run Pester Tests
         shell: pwsh

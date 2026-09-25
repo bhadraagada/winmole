@@ -234,7 +234,7 @@ function Show-SystemInfo {
 
 function Main {
     # Initialize
-    if ($Command -eq 'analyze' -and @($CommandArgs) -match '^-{1,2}json$') {
+    if ($Command -in @('analyze', 'status') -and @($CommandArgs) -match '^-{1,2}json$') {
         Initialize-WinMole 6>$null
     }
     else {

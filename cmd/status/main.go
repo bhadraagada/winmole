@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"runtime"
@@ -126,6 +127,10 @@ func NewCollector() *Collector {
 }
 
 func (c *Collector) Collect() MetricsSnapshot {
+	return c.collect(true)
+}
+
+func (c *Collector) collect(includeDetails bool) MetricsSnapshot {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -136,12 +141,17 @@ func (c *Collector) Collect() MetricsSnapshot {
 	)
 
 	snapshot.CollectedAt = time.Now()
-	snapshot.CPUCores = runtime.NumCPU()
+	if includeDetails {
+		snapshot.CPUCores = runtime.NumCPU()
+	}
 
 	// Host info
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		if !includeDetails {
+			return
+		}
 		if info, err := host.InfoWithContext(ctx); err == nil {
 			mu.Lock()
 			snapshot.Hostname = info.Hostname
@@ -156,16 +166,21 @@ func (c *Collector) Collect() MetricsSnapshot {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if cpuInfo, err := cpu.InfoWithContext(ctx); err == nil && len(cpuInfo) > 0 {
-			mu.Lock()
-			snapshot.CPUModel = cpuInfo[0].ModelName
-			mu.Unlock()
+		if includeDetails {
+			if cpuInfo, err := cpu.InfoWithContext(ctx); err == nil && len(cpuInfo) > 0 {
+				mu.Lock()
+				snapshot.CPUModel = cpuInfo[0].ModelName
+				mu.Unlock()
+			}
 		}
 		if percent, err := c.cpuPercent(ctx, 500*time.Millisecond, false); err == nil && len(percent) > 0 {
 			mu.Lock()
 			snapshot.CPUAvailable = true
 			snapshot.CPUPercent = percent[0]
 			mu.Unlock()
+		}
+		if !includeDetails {
+			return
 		}
 		if perCore, err := c.cpuPercent(ctx, 500*time.Millisecond, true); err == nil {
 			mu.Lock()
@@ -234,6 +249,9 @@ func (c *Collector) Collect() MetricsSnapshot {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		if !includeDetails {
+			return
+		}
 		if netIO, err := net.IOCountersWithContext(ctx, true); err == nil {
 			var networks []NetworkInfo
 			for _, io := range netIO {
@@ -259,6 +277,9 @@ func (c *Collector) Collect() MetricsSnapshot {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		if !includeDetails {
+			return
+		}
 		procs, err := process.ProcessesWithContext(ctx)
 		if err != nil {
 			return
@@ -776,6 +797,19 @@ func truncateString(s string, maxLen int) string {
 }
 
 func main() {
+	jsonOutput := flag.Bool("json", false, "Print one read-only JSON health snapshot and exit")
+	flag.Parse()
+	if flag.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "status does not accept positional arguments")
+		os.Exit(2)
+	}
+	if *jsonOutput {
+		if err := writeJSONReport(os.Stdout, NewCollector().collect(false)); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
 	p := tea.NewProgram(newModel(), tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)

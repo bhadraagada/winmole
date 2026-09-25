@@ -157,14 +157,17 @@ function Write-WinMoleError { param($Message) Write-Host $Message }
         }
     }
 
-    It 'keeps JSON stdout empty when analyzer dependency setup fails' {
+    It 'keeps JSON stdout empty when <Name> dependency setup fails' -ForEach @(
+        @{ Name = 'analyze' }, @{ Name = 'status' }
+    ) {
         Set-Content -LiteralPath $script:GoExe -Value "@echo off`r`necho fixture dependency setup failed 1>&2`r`nexit /b 7"
         $core = New-Item -ItemType Directory -Path (Join-Path $script:Fixture 'lib\core')
         Set-Content -LiteralPath (Join-Path $core.FullName 'common.ps1') -Value 'function Restore-WinMoleConsoleEncoding { }'
-        $entryPoint = Join-Path $script:BIN_DIR 'analyze.ps1'
-        Copy-Item -LiteralPath (Join-Path $script:RepoRoot 'bin\analyze.ps1') -Destination $entryPoint
+        $entryPoint = Join-Path $script:BIN_DIR "$Name.ps1"
+        Copy-Item -LiteralPath (Join-Path $script:RepoRoot "bin\$Name.ps1") -Destination $entryPoint
         $shell = if ($PSVersionTable.PSEdition -eq 'Desktop') { 'powershell.exe' } else { 'pwsh.exe' }
-        $commandArguments = @('-NoProfile', '-NonInteractive', '-File', "`"$entryPoint`"", '-Path', "`"$script:Fixture`"", '-Json')
+        $commandArguments = @('-NoProfile', '-NonInteractive', '-File', "`"$entryPoint`"", '-Json')
+        if ($Name -eq 'analyze') { $commandArguments += @('-Path', "`"$script:Fixture`"") }
         $stderrPath = Join-Path $script:Fixture 'stderr.txt'
         $stdoutPath = Join-Path $script:Fixture 'stdout.txt'
         $process = Start-Process -FilePath (Join-Path $PSHOME $shell) -ArgumentList $commandArguments `
@@ -173,7 +176,7 @@ function Write-WinMoleError { param($Message) Write-Host $Message }
         Get-Content -LiteralPath $stdoutPath -Raw | Should -BeNullOrEmpty
         Get-Content -LiteralPath $stderrPath -Raw | Should -Match 'fixture dependency setup failed'
         Get-Content -LiteralPath $stderrPath -Raw | Should -Match 'Dependency setup failed\.'
-        Test-Path -LiteralPath (Join-Path $script:BIN_DIR 'analyze.exe') | Should -BeFalse
+        Test-Path -LiteralPath (Join-Path $script:BIN_DIR "$Name.exe") | Should -BeFalse
     }
 
     Context 'Build script' {
