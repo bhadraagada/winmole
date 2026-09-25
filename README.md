@@ -200,10 +200,11 @@ Valid zero readings remain numeric zero. `health.message` retains warnings
 from the measurements that could be read.
 
 `disks_complete` describes drive enumeration; check each disk's `available`
-flag as well. An empty drive list is `[]`. Network rates and process lists are
-not included in this snapshot. Collection uses the dashboard's existing
-collector and timeout. Missing measurements still produce a report; command
-or output failures return a nonzero exit code with diagnostics on stderr.
+flag as well. An empty drive list is `[]`. The snapshot collects only its health
+inputs, skipping network, process, and other dashboard-only queries. It uses
+the dashboard's existing measurement and timeout logic. Missing measurements
+still produce a report; command or output failures return a nonzero exit code
+with diagnostics on stderr.
 
 ### Developer Artifact Purge
 

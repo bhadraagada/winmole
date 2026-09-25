@@ -4,13 +4,59 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/shirou/gopsutil/v3/mem"
 )
+
+func TestHealthOnlyCollection(t *testing.T) {
+	for _, missingMemory := range []bool{false, true} {
+		c := healthyCollector()
+		if missingMemory {
+			c.virtualMemory = func(context.Context) (*mem.VirtualMemoryStat, error) {
+				return nil, errors.New("memory unavailable")
+			}
+		}
+		aggregateCalls, perCoreCalls := 0, 0
+		c.cpuPercent = func(_ context.Context, _ time.Duration, perCore bool) ([]float64, error) {
+			if perCore {
+				perCoreCalls++
+			} else {
+				aggregateCalls++
+			}
+			return []float64{25}, nil
+		}
+		health := c.collect(false)
+		if aggregateCalls != 1 || perCoreCalls != 0 {
+			t.Fatalf("health report sampled CPU %d aggregate/%d per-core times", aggregateCalls, perCoreCalls)
+		}
+		if health.Hostname != "" || health.OS != "" || health.Platform != "" || health.Uptime != 0 || health.CPUModel != "" || health.CPUCores != 0 || health.CPUPerCore != nil || health.Networks != nil || health.Processes != nil {
+			t.Fatalf("health report collected unused details: %+v", health)
+		}
+		full := c.Collect()
+		if aggregateCalls != 2 || perCoreCalls != 1 || len(full.CPUPerCore) != 1 || full.CPUCores < 1 {
+			t.Fatal("default collection stopped collecting dashboard details")
+		}
+		// Both modes must keep the same readings, availability and health rules.
+		full.CollectedAt = health.CollectedAt
+		var healthJSON, fullJSON bytes.Buffer
+		if err := writeJSONReport(&healthJSON, health); err != nil {
+			t.Fatal(err)
+		}
+		if err := writeJSONReport(&fullJSON, full); err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(healthJSON.Bytes(), fullJSON.Bytes()) {
+			t.Fatalf("health readings differ:\n%s\n%s", &healthJSON, &fullJSON)
+		}
+	}
+}
 
 func TestJSONReport(t *testing.T) {
 	snapshot := MetricsSnapshot{
