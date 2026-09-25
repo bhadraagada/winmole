@@ -44,7 +44,7 @@ function Show-StatusHelp {
     Write-Host "    ${cyan}CPU${nc}        Total usage with graph and core count"
     Write-Host "    ${cyan}Memory${nc}     RAM usage and availability"
     Write-Host "    ${cyan}Disk${nc}       Drive usage and free space"
-    Write-Host "    ${cyan}Network${nc}    Bytes sent/received per interface"
+    Write-Host "    ${cyan}Network${nc}    Upload/download rates per interface (bytes/sec)"
     Write-Host "    ${cyan}Processes${nc}  Top five by CPU or memory usage"
     Write-Host ""
     Write-Host "  ${green}CONTROLS:${nc}"
