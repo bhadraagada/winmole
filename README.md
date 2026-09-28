@@ -111,6 +111,11 @@ the first or last entry. The `g`/`G` shortcuts also jump to the first or last
 entry. Page size follows the terminal height and the space used by the
 large-files panel or error messages.
 
+Press `s` to switch the listing between largest-first and alphabetical order.
+The current sort appears beside the total. Names sort without regard to case;
+the highlighted entry stays selected, and the sort choice persists when entering
+directories, going back, or refreshing. JSON reports remain sorted by size.
+
 The analyzer fits the listing to the terminal, keeping the selected entry, its
 size, and navigation controls visible. Long names and paths retain their suffix;
 usage bars shrink first. The `f` large-files panel shares the available rows with

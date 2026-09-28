@@ -178,6 +178,7 @@ type model struct {
 	largeFiles     []fileEntry
 	history        []historyEntry
 	selected       int
+	sortByName     bool
 	totalSize      int64
 	scanning       bool
 	showLargeFiles bool
@@ -245,6 +246,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.largeFiles = msg.largeFiles
 		m.totalSize = msg.totalSize
 		m.scanning = false
+		m.sortEntries()
 		m.selected = 0
 		// Cache result
 		m.cache[m.path] = historyEntry{
@@ -362,6 +364,8 @@ func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					m.entries = cached.Entries
 					m.largeFiles = cached.LargeFiles
 					m.totalSize = cached.TotalSize
+					m.sortEntries()
+					m.selected = 0
 					return m, nil
 				}
 
@@ -379,6 +383,7 @@ func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.largeFiles = last.LargeFiles
 			m.totalSize = last.TotalSize
 			m.selected = last.Selected
+			m.sortEntries()
 			m.multiSelected = make(map[string]bool)
 			m.scanning = false
 		} else if parent := filepath.Dir(m.path); parent != m.path {
@@ -417,6 +422,9 @@ func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "f":
 		m.showLargeFiles = !m.showLargeFiles
+	case "s":
+		m.sortByName = !m.sortByName
+		m.sortEntries()
 	case "r":
 		// Refresh
 		delete(m.cache, m.path)
@@ -436,6 +444,32 @@ func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+func (m *model) sortEntries() {
+	selectedPath := ""
+	if m.selected >= 0 && m.selected < len(m.entries) {
+		selectedPath = m.entries[m.selected].Path
+	}
+	// Cached listings and history share slices; changing order must not move their saved selection.
+	m.entries = append([]dirEntry(nil), m.entries...)
+	sort.Slice(m.entries, func(i, j int) bool {
+		a, b := m.entries[i], m.entries[j]
+		if !m.sortByName && a.Size != b.Size {
+			return a.Size > b.Size
+		}
+		nameA, nameB := strings.ToLower(a.Name), strings.ToLower(b.Name)
+		if nameA != nameB {
+			return nameA < nameB
+		}
+		return a.Name < b.Name
+	})
+	for i, entry := range m.entries {
+		if entry.Path == selectedPath {
+			m.selected = i
+			break
+		}
+	}
 }
 
 // Before Bubble Tea reports the terminal size, use a conventional viewport.
@@ -542,9 +576,9 @@ func (m model) listingLayout(width, height int, total string) ([]string, string,
 		return lines, "q quit", 0
 	}
 
-	footer := "↑↓ navigate  ↵ enter  ← back  f files  d delete  r refresh  q quit"
+	footer := "↑↓ navigate  ↵ enter  ← back  s sort  f files  d delete  r refresh  q quit"
 	if ansi.StringWidth(footer) > width {
-		footer = "↑↓ navigate  ↵ enter  ← back\nf files  d delete  r refresh  q quit"
+		footer = "↑↓ navigate  ↵ enter  ← back  s sort\nf files  d delete  r refresh  q quit"
 	}
 	footerRows := strings.Count(footer, "\n") + 1
 	if m.err != nil {
@@ -558,7 +592,15 @@ func (m model) listingLayout(width, height int, total string) ([]string, string,
 		lines = append(lines, colorRed+strings.Join(errorLines, "\n")+colorReset)
 	}
 
-	lines = append(lines, "  Total: "+colorYellow+total+colorReset)
+	sortName := "size"
+	if m.sortByName {
+		sortName = "name"
+	}
+	summary := total + " | sort: " + sortName
+	if ansi.StringWidth("Total: "+summary) <= width {
+		summary = "Total: " + summary
+	}
+	lines = append(lines, colorYellow+summary+colorReset)
 	// Count rendered rows because wrapped errors occupy multiple lines.
 	available := height - strings.Count(strings.Join(lines, "\n"), "\n") - 1 - footerRows - 1
 	if m.showLargeFiles && len(m.largeFiles) > 0 && available > 1 {
