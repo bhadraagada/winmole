@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `winmole status -Json` and `status.exe -json` export a single read-only
   CPU, memory, swap, disk, and health snapshot without an interactive terminal.
   Unavailable numeric readings are `null`, with explicit availability flags.
+- Press `s` in the disk analyzer to switch between largest-first and
+  case-insensitive alphabetical order without changing the highlighted entry.
+  The sort choice persists through navigation and refresh; JSON reports keep
+  their existing size order.
 
 ### Fixed
 
