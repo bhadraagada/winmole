@@ -451,23 +451,32 @@ func (m *model) sortEntries() {
 	if m.selected >= 0 && m.selected < len(m.entries) {
 		selectedPath = m.entries[m.selected].Path
 	}
-	// Cached listings and history share slices; changing order must not move their saved selection.
-	m.entries = append([]dirEntry(nil), m.entries...)
-	sort.Slice(m.entries, func(i, j int) bool {
-		a, b := m.entries[i], m.entries[j]
+	type sortEntry struct {
+		index int
+		name  string
+	}
+	order := make([]sortEntry, len(m.entries))
+	for i, entry := range m.entries {
+		order[i] = sortEntry{index: i, name: strings.ToLower(entry.Name)}
+	}
+	sort.Slice(order, func(i, j int) bool {
+		a, b := m.entries[order[i].index], m.entries[order[j].index]
 		if !m.sortByName && a.Size != b.Size {
 			return a.Size > b.Size
 		}
-		nameA, nameB := strings.ToLower(a.Name), strings.ToLower(b.Name)
-		if nameA != nameB {
-			return nameA < nameB
+		if order[i].name != order[j].name {
+			return order[i].name < order[j].name
 		}
 		return a.Name < b.Name
 	})
-	for i, entry := range m.entries {
+	// Cached listings and history share slices; changing order must not move their saved selection.
+	entries := m.entries
+	m.entries = make([]dirEntry, len(entries))
+	for i, item := range order {
+		entry := entries[item.index]
+		m.entries[i] = entry
 		if entry.Path == selectedPath {
 			m.selected = i
-			break
 		}
 	}
 }

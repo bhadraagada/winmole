@@ -3,11 +3,33 @@
 package main
 
 import (
+	"fmt"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 )
+
+func BenchmarkAnalyzerSort(b *testing.B) {
+	for _, count := range []int{100, 100000} {
+		entries := make([]dirEntry, count)
+		for i := range entries {
+			name := fmt.Sprintf("PrOjEcT-%06d-ÄPFEL-世界.bin", i*7919%count)
+			entries[i] = dirEntry{Name: name, Path: name, Size: int64(i % 32)}
+		}
+		for _, byName := range []bool{false, true} {
+			b.Run(fmt.Sprintf("entries=%d/name=%t", count, byName), func(b *testing.B) {
+				m := model{sortByName: byName}
+				b.ReportAllocs()
+				for i := 0; i < b.N; i++ {
+					m.entries = entries
+					m.selected = count / 2
+					m.sortEntries()
+				}
+			})
+		}
+	}
+}
 
 func TestAnalyzerSortToggle(t *testing.T) {
 	entries := []dirEntry{
