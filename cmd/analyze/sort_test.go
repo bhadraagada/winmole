@@ -12,15 +12,28 @@ import (
 
 func BenchmarkAnalyzerSort(b *testing.B) {
 	for _, count := range []int{100, 100000} {
-		entries := make([]dirEntry, count)
-		for i := range entries {
-			name := fmt.Sprintf("PrOjEcT-%06d-ÄPFEL-世界.bin", i*7919%count)
-			entries[i] = dirEntry{Name: name, Path: name, Size: int64(i % 32)}
-		}
-		for _, byName := range []bool{false, true} {
-			b.Run(fmt.Sprintf("entries=%d/name=%t", count, byName), func(b *testing.B) {
-				m := model{sortByName: byName}
+		for _, mode := range []struct {
+			name   string
+			byName bool
+			unique bool
+		}{
+			{name: "size-ties"},
+			{name: "size-unique", unique: true},
+			{name: "name", byName: true},
+		} {
+			b.Run(fmt.Sprintf("entries=%d/%s", count, mode.name), func(b *testing.B) {
+				entries := make([]dirEntry, count)
+				for i := range entries {
+					name := fmt.Sprintf("PrOjEcT-%06d-ÄPFEL-世界.bin", i*7919%count)
+					size := int64(i % 32)
+					if mode.unique {
+						size = int64(count - i)
+					}
+					entries[i] = dirEntry{Name: name, Path: name, Size: size}
+				}
+				m := model{sortByName: mode.byName}
 				b.ReportAllocs()
+				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
 					m.entries = entries
 					m.selected = count / 2

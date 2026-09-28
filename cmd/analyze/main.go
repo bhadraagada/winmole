@@ -456,13 +456,20 @@ func (m *model) sortEntries() {
 		name  string
 	}
 	order := make([]sortEntry, len(m.entries))
-	for i, entry := range m.entries {
-		order[i] = sortEntry{index: i, name: strings.ToLower(entry.Name)}
+	for i := range m.entries {
+		order[i].index = i
 	}
 	sort.Slice(order, func(i, j int) bool {
 		a, b := m.entries[order[i].index], m.entries[order[j].index]
 		if !m.sortByName && a.Size != b.Size {
 			return a.Size > b.Size
+		}
+		// Size sorting only needs folded names for ties; cache each key when first needed.
+		if order[i].name == "" {
+			order[i].name = strings.ToLower(a.Name)
+		}
+		if order[j].name == "" {
+			order[j].name = strings.ToLower(b.Name)
 		}
 		if order[i].name != order[j].name {
 			return order[i].name < order[j].name
