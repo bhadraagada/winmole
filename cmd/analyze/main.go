@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+	"unicode"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
@@ -179,6 +180,9 @@ type model struct {
 	history        []historyEntry
 	selected       int
 	sortByName     bool
+	searching      bool
+	searchQuery    string
+	searchStart    int
 	totalSize      int64
 	scanning       bool
 	showLargeFiles bool
@@ -241,6 +245,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		return m, nil
 	case scanCompleteMsg:
+		m.searching = false
+		m.searchQuery = ""
 		m.err = nil
 		m.entries = msg.entries
 		m.largeFiles = msg.largeFiles
@@ -261,6 +267,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.scanTotal = msg.total
 		return m, nil
 	case scanErrorMsg:
+		m.searching = false
+		m.searchQuery = ""
 		m.err = msg.err
 		m.scanning = false
 		m.entries = nil
@@ -322,9 +330,17 @@ func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if m.searching {
+		return m.handleSearchKey(msg)
+	}
+
 	switch msg.String() {
 	case "q", "ctrl+c":
 		return m, tea.Quit
+	case "/":
+		m.searching = true
+		m.searchQuery = ""
+		m.searchStart = m.selected
 	case "up", "k":
 		if m.selected > 0 {
 			m.selected--
@@ -446,6 +462,78 @@ func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m model) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyCtrlC:
+		return m, tea.Quit
+	case tea.KeyEsc, tea.KeyEnter:
+		if msg.Type == tea.KeyEsc {
+			m.selected = m.searchStart
+		}
+		m.searching = false
+		m.searchQuery = ""
+		return m, nil
+	case tea.KeyUp, tea.KeyDown:
+		direction := 1
+		if msg.Type == tea.KeyUp {
+			direction = -1
+		}
+		m.findSearchMatch(direction)
+		return m, nil
+	case tea.KeyBackspace, tea.KeyCtrlH:
+		// Delete one displayed character, including combining marks and emoji.
+		graphemes := uniseg.NewGraphemes(m.searchQuery)
+		start := 0
+		for graphemes.Next() {
+			start, _ = graphemes.Positions()
+		}
+		m.searchQuery = m.searchQuery[:start]
+	case tea.KeyRunes, tea.KeySpace:
+		if msg.Alt {
+			return m, nil
+		}
+		input := msg.Runes
+		if msg.Type == tea.KeySpace {
+			input = []rune{' '}
+		}
+		query := []rune(m.searchQuery)
+		for _, r := range input {
+			// Bound pasted input and exclude terminal controls and bidi overrides.
+			if len(query) < 256 && (unicode.IsPrint(r) || r == '\u200d') {
+				query = append(query, r)
+			}
+		}
+		m.searchQuery = string(query)
+	default:
+		return m, nil
+	}
+	if m.searchQuery == "" {
+		m.selected = m.searchStart
+	}
+	m.findSearchMatch(0)
+	return m, nil
+}
+
+func (m *model) findSearchMatch(direction int) {
+	if m.searchQuery == "" || len(m.entries) == 0 {
+		return
+	}
+	query := strings.ToLower(m.searchQuery)
+	start := m.selected
+	if direction != 0 {
+		start += direction
+	} else {
+		direction = 1
+	}
+	for offset := 0; offset < len(m.entries); offset++ {
+		index := (start + offset*direction + len(m.entries)) % len(m.entries)
+		if strings.Contains(strings.ToLower(m.entries[index].Name), query) {
+			m.selected = index
+			return
+		}
+	}
+}
+
 func (m *model) sortEntries() {
 	selectedPath := ""
 	if m.selected >= 0 && m.selected < len(m.entries) {
@@ -519,6 +607,9 @@ func (m model) View() string {
 		return view
 	}
 	if width < 40 || height < 9 {
+		if m.searching {
+			return ansi.Truncate("Resize 40x9; Esc cancels; Ctrl+C quits", width, "")
+		}
 		return ansi.Truncate("Resize to 40x9 or larger; q quits", width, "")
 	}
 
@@ -592,9 +683,18 @@ func (m model) listingLayout(width, height int, total string) ([]string, string,
 		return lines, "q quit", 0
 	}
 
-	footer := "↑↓ navigate  ↵ enter  ← back  s sort  f files  d delete  r refresh  q quit"
+	footer := "↑↓ navigate  ↵ enter  ← back  / search  s sort  f files  d delete  r refresh  q quit"
 	if ansi.StringWidth(footer) > width {
-		footer = "↑↓ navigate  ↵ enter  ← back  s sort\nf files  d delete  r refresh  q quit"
+		footer = "↑↓ move  ↵ enter  ← back  / search\ns sort f files d delete r refresh q quit"
+	}
+	if m.searching {
+		status := ""
+		if m.searchQuery == "" {
+			status = " (type a name)"
+		} else if len(m.entries) == 0 || !strings.Contains(strings.ToLower(m.entries[m.selected].Name), strings.ToLower(m.searchQuery)) {
+			status = " (no matches)"
+		}
+		footer = "/" + truncatePath(m.searchQuery, width-1-ansi.StringWidth(status)) + status + "\n↑↓ match  Enter accept  Esc cancel"
 	}
 	footerRows := strings.Count(footer, "\n") + 1
 	if m.err != nil {
