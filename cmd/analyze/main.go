@@ -514,11 +514,21 @@ func (m model) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func foldSearchText(text string) string {
+	return strings.Map(func(r rune) rune {
+		folded := r
+		for next := unicode.SimpleFold(r); next != r; next = unicode.SimpleFold(next) {
+			folded = min(folded, next)
+		}
+		return folded
+	}, text)
+}
+
 func (m *model) findSearchMatch(direction int) {
 	if m.searchQuery == "" || len(m.entries) == 0 {
 		return
 	}
-	query := strings.ToLower(m.searchQuery)
+	query := foldSearchText(m.searchQuery)
 	start := m.selected
 	if direction != 0 {
 		start += direction
@@ -527,7 +537,7 @@ func (m *model) findSearchMatch(direction int) {
 	}
 	for offset := 0; offset < len(m.entries); offset++ {
 		index := (start + offset*direction + len(m.entries)) % len(m.entries)
-		if strings.Contains(strings.ToLower(m.entries[index].Name), query) {
+		if strings.Contains(foldSearchText(m.entries[index].Name), query) {
 			m.selected = index
 			return
 		}
@@ -691,7 +701,7 @@ func (m model) listingLayout(width, height int, total string) ([]string, string,
 		status := ""
 		if m.searchQuery == "" {
 			status = " (type a name)"
-		} else if len(m.entries) == 0 || !strings.Contains(strings.ToLower(m.entries[m.selected].Name), strings.ToLower(m.searchQuery)) {
+		} else if len(m.entries) == 0 || !strings.Contains(foldSearchText(m.entries[m.selected].Name), foldSearchText(m.searchQuery)) {
 			status = " (no matches)"
 		}
 		footer = "/" + truncatePath(m.searchQuery, width-1-ansi.StringWidth(status)) + status + "\n↑↓ match  Enter accept  Esc cancel"

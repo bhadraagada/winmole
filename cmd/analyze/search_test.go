@@ -183,3 +183,42 @@ func TestAnalyzerSearchEndsWhenPendingOperationReplacesListing(t *testing.T) {
 		assertViewFits(t, m)
 	}
 }
+
+func TestAnalyzerSearchUnicodeSimpleFold(t *testing.T) {
+	type foldCase struct {
+		name, query string
+		match       bool
+	}
+	cases := []foldCase{
+		{"ΟΣ", "ος", true},
+		{"ος", "ΟΣ", true},
+		{"I", "ı", false},
+		{"ı", "I", false},
+		{"ß", "ss", false},
+		{"ss", "ß", false},
+	}
+	for _, variants := range [][]string{{"Σ", "σ", "ς"}, {"K", "k", "K"}, {"S", "s", "ſ"}} {
+		for _, name := range variants {
+			for _, query := range variants {
+				cases = append(cases, foldCase{name, query, true})
+			}
+		}
+	}
+	for _, tc := range cases {
+		t.Run(tc.name+"/"+tc.query, func(t *testing.T) {
+			m := newModel("fixture")
+			m.scanning = false
+			m.entries = []dirEntry{{Name: "000", Path: "000"}, {Name: "123" + tc.name + "456", Path: tc.name}}
+			m = searchKey(t, m, navigationKey("/"))
+			m = searchKey(t, m, navigationKey(tc.query))
+			if (m.selected == 1) != tc.match {
+				t.Errorf("search selected=%d for name=%q query=%q, want match=%t", m.selected, tc.name, tc.query, tc.match)
+			}
+			// Test the status with the candidate selected, even when it is not a match.
+			m.selected = 1
+			if strings.Contains(m.View(), "no matches") == tc.match {
+				t.Errorf("search status disagrees for name=%q query=%q, want match=%t", tc.name, tc.query, tc.match)
+			}
+		})
+	}
+}
