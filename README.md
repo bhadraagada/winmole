@@ -116,6 +116,15 @@ The current sort appears beside the total. Names sort without regard to case;
 the highlighted entry stays selected, and the sort choice persists when entering
 directories, going back, or refreshing. JSON reports remain sorted by size.
 
+Press `/` to find an entry by name in the current directory. Matching ignores
+case and moves the highlight without hiding entries or changing totals. Type
+part of a name, then use `Up`/`Down` to move between matches, wrapping at either
+end. `Enter` keeps the highlighted entry and closes search; `Esc` cancels and
+restores the original highlight. `Backspace` edits the query. While searching,
+letters such as `d` and `q` are text; use `Ctrl+C` to quit. Search covers the
+current listing only, not names inside its subdirectories. Queries accept up
+to 256 Unicode code points.
+
 The analyzer fits the listing to the terminal, keeping the selected entry, its
 size, and navigation controls visible. Long names and paths retain their suffix;
 usage bars shrink first. The `f` large-files panel shares the available rows with

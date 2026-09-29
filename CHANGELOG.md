@@ -30,6 +30,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The sort choice persists through navigation and refresh; JSON reports keep
   their existing size order.
 
+- Press `/` in the disk analyzer to find immediate entries by name without
+  filtering the listing. Search ignores case, supports next/previous matches,
+  and lets you keep the match or restore the original highlight on cancel.
+
 ### Fixed
 
 - The analyzer marks files it cannot stat as partial instead of reporting
