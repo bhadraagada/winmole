@@ -173,6 +173,11 @@ C:      █████████████░░░░░░  67.2%       D
 Free    156.3 GB / 476.9 GB              Up      ▮▯▯▯▯  0.8 MB/s
 ```
 
+Press `p` in the status dashboard to show or hide usage for each logical
+processor, labeled from `CPU 0`. This helps spot a busy processor when overall
+CPU usage is low. The readings update with each refresh and remain scrollable
+on machines with many processors. Missing per-core readings show as unavailable.
+
 Press `m` in the status dashboard to switch the top five processes between CPU
 and memory usage. CPU is the default; the process heading shows the active sort.
 Use `Up`/`Down` or `k`/`j` to scroll, `PgUp`/`PgDn` to move a page, and

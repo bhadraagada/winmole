@@ -417,6 +417,7 @@ type model struct {
 	metrics      MetricsSnapshot
 	animFrame    int
 	catHidden    bool
+	showPerCore  bool
 	sortByMemory bool
 	ready        bool
 	collecting   bool
@@ -464,6 +465,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "c":
 			m.catHidden = !m.catHidden
+		case "p":
+			m.showPerCore = !m.showPerCore
 		case "up", "k":
 			m.scroll--
 		case "down", "j":
@@ -526,7 +529,7 @@ func (m model) View() string {
 func (m model) layout() (lines, footer []string, height int) {
 	footer = []string{
 		"[↑/↓ j/k] scroll [PgUp/PgDn] page [Home/End]",
-		"[q] quit [r] refresh [m] sort [c] mascot",
+		"[q] quit [r] refresh [m] sort [p] cores [c] mascot",
 	}
 	content := strings.Trim(m.content(), "\n")
 	if !m.sized {
@@ -606,6 +609,21 @@ func (m model) content() string {
 		b.WriteString(fmt.Sprintf("  %s\n", renderProgressBar(m.metrics.CPUPercent, 30)))
 	} else {
 		b.WriteString("  Usage: Unavailable\n")
+	}
+	if m.showPerCore {
+		if len(m.metrics.CPUPerCore) == 0 {
+			b.WriteString("  Logical processors: Unavailable\n")
+		} else {
+			b.WriteString("  Logical processors\n")
+			for i, percent := range m.metrics.CPUPerCore {
+				label := fmt.Sprintf("  CPU %d: %5.1f%% ", i, percent)
+				barWidth := 20
+				if m.width > 0 {
+					barWidth = min(barWidth, max(0, m.width-ansi.StringWidth(label)))
+				}
+				b.WriteString(label + renderProgressBar(percent, barWidth) + "\n")
+			}
+		}
 	}
 	b.WriteString("\n")
 
