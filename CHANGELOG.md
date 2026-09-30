@@ -33,6 +33,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Press `/` in the disk analyzer to find immediate entries by name without
   filtering the listing. Search ignores case, supports next/previous matches,
   and lets you keep the match or restore the original highlight on cancel.
+- Press `p` in the status dashboard to show usage for every logical processor,
+  helping identify a busy processor hidden by low overall CPU usage. Readings
+  reuse the existing samples and remain scrollable in short windows.
 
 ### Fixed
 
