@@ -39,7 +39,7 @@ func TestViewPreservesUnicodeLabels(t *testing.T) {
 	m := newModel()
 	updated, _ := m.Update(metricsMsg(MetricsSnapshot{
 		CPUModel:  strings.Repeat("界", 26),
-		Processes: []ProcessInfo{{PID: 1, Name: "网络连接适配器", CPU: 10}},
+		Processes: []ProcessInfo{{PID: 1, Name: "网络连接适配器", CPUAvailable: true, CPU: 10}},
 		Networks:  []NetworkInfo{{Name: strings.Repeat("👩‍💻", 11)}},
 	}))
 	view := updated.View()

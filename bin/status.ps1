@@ -46,6 +46,8 @@ function Show-StatusHelp {
     Write-Host "    ${cyan}Disk${nc}       Drive usage and free space"
     Write-Host "    ${cyan}Network${nc}    Bytes sent/received per interface"
     Write-Host "    ${cyan}Processes${nc}  Top five by CPU or memory usage"
+    Write-Host "               CPU measures usage between samples; first/failed samples are unavailable"
+    Write-Host "               100% CPU = one logical processor; multi-core use can exceed 100%"
     Write-Host ""
     Write-Host "  ${green}CONTROLS:${nc}"
     Write-Host ""
