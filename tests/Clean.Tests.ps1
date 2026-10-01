@@ -75,6 +75,8 @@ Describe "Integration Tests" -Tag "Integration" {
                 $output = & (Join-Path $script:BIN_DIR "clean.ps1") -User -DryRun 2>&1 | Out-String
                 $output | Should -Not -Match "An error occurred"
                 $output | Should -Not -Match "is not recognized as"
+                $output | Should -Not -Match '(?m)^\s*Name\s+Value\s*$'
+                $output | Should -Not -Match '(?m)^\s*(True|False)\s*$'
             }
             finally {
                 Remove-Item Env:WINMOLE_DRY_RUN -ErrorAction SilentlyContinue

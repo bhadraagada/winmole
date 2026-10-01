@@ -81,6 +81,11 @@ jobs:
           Copy-Item -Path bin/analyze-windows-arm64.exe -Destination release/bin/analyze.exe -Force
           Copy-Item -Path bin/status-windows-arm64.exe -Destination release/bin/status.exe -Force
           Compress-Archive -Path release/* -DestinationPath winmole-windows-arm64.zip
+
+          Get-FileHash -Path winmole-windows-*.zip -Algorithm SHA256 |
+            Sort-Object Path |
+            ForEach-Object { "$($_.Hash.ToLowerInvariant())  $(Split-Path $_.Path -Leaf)" } |
+            Set-Content -Path SHA256SUMS -Encoding ascii
           
           Write-Host "Created release archives:"
           Get-ChildItem *.zip | ForEach-Object { Write-Host "  $($_.Name) - $([math]::Round($_.Length/1MB, 2)) MB" }
@@ -92,6 +97,7 @@ jobs:
           path: |
             winmole-windows-amd64.zip
             winmole-windows-arm64.zip
+            SHA256SUMS
             bin/*-windows-*.exe
           retention-days: 5
 
@@ -117,6 +123,7 @@ jobs:
           files: |
             artifacts/winmole-windows-amd64.zip
             artifacts/winmole-windows-arm64.zip
+            artifacts/SHA256SUMS
             artifacts/bin/*-windows-*.exe
           generate_release_notes: true
           draft: false
