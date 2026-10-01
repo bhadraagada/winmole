@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"maps"
 	"time"
 
 	"github.com/shirou/gopsutil/v3/process"
@@ -43,7 +44,7 @@ func readProcessSamples(ctx context.Context) ([]processSample, error) {
 		}
 		samples = append(samples, sample)
 	}
-	return samples, nil
+	return samples, ctx.Err()
 }
 
 func (c *Collector) collectProcesses(ctx context.Context) []ProcessInfo {
@@ -52,15 +53,16 @@ func (c *Collector) collectProcesses(ctx context.Context) []ProcessInfo {
 	c.processMu.Lock()
 	defer c.processMu.Unlock()
 	samples, err := c.processSamples(ctx)
-	if err != nil {
-		c.prevProcesses = nil
-		return nil
-	}
 	current := make(map[int32]processSample, len(samples))
+	if err != nil {
+		// An interrupted scan says nothing about processes it did not reach.
+		maps.Copy(current, c.prevProcesses)
+	}
 	var infos []ProcessInfo
 	for _, sample := range samples {
 		info := sample.info
 		info.CPU, info.CPUAvailable = 0, false
+		delete(current, info.PID)
 		if sample.info.CPUAvailable {
 			previous, exists := c.prevProcesses[info.PID]
 			elapsed := sample.at.Sub(previous.at).Seconds()
@@ -75,7 +77,7 @@ func (c *Collector) collectProcesses(ctx context.Context) []ProcessInfo {
 			infos = append(infos, info)
 		}
 	}
-	// Exited processes and failed readings cannot supply the next baseline.
+	// Complete scans prune exited processes; failed CPU readings always reset.
 	c.prevProcesses = current
 	return infos
 }
