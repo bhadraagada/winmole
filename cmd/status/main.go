@@ -21,7 +21,6 @@ import (
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/shirou/gopsutil/v3/net"
-	"github.com/shirou/gopsutil/v3/process"
 )
 
 // Styles
@@ -97,32 +96,37 @@ type NetworkInfo struct {
 }
 
 type ProcessInfo struct {
-	PID    int32
-	Name   string
-	CPU    float64
-	Memory float32
+	PID          int32
+	Name         string
+	CPU          float64
+	CPUAvailable bool
+	Memory       float32
 }
 
 // Collector
 type Collector struct {
-	prevNet       map[string]net.IOCountersStat
-	prevNetTime   time.Time
-	mu            sync.Mutex
-	cpuPercent    func(context.Context, time.Duration, bool) ([]float64, error)
-	virtualMemory func(context.Context) (*mem.VirtualMemoryStat, error)
-	swapMemory    func(context.Context) (*mem.SwapMemoryStat, error)
-	partitions    func(context.Context, bool) ([]disk.PartitionStat, error)
-	diskUsage     func(context.Context, string) (*disk.UsageStat, error)
+	prevNet        map[string]net.IOCountersStat
+	prevNetTime    time.Time
+	mu             sync.Mutex
+	processMu      sync.Mutex
+	prevProcesses  map[int32]processSample
+	processSamples func(context.Context) ([]processSample, error)
+	cpuPercent     func(context.Context, time.Duration, bool) ([]float64, error)
+	virtualMemory  func(context.Context) (*mem.VirtualMemoryStat, error)
+	swapMemory     func(context.Context) (*mem.SwapMemoryStat, error)
+	partitions     func(context.Context, bool) ([]disk.PartitionStat, error)
+	diskUsage      func(context.Context, string) (*disk.UsageStat, error)
 }
 
 func NewCollector() *Collector {
 	return &Collector{
-		prevNet:       make(map[string]net.IOCountersStat),
-		cpuPercent:    cpu.PercentWithContext,
-		virtualMemory: mem.VirtualMemoryWithContext,
-		swapMemory:    mem.SwapMemoryWithContext,
-		partitions:    disk.PartitionsWithContext,
-		diskUsage:     disk.UsageWithContext,
+		prevNet:        make(map[string]net.IOCountersStat),
+		processSamples: readProcessSamples,
+		cpuPercent:     cpu.PercentWithContext,
+		virtualMemory:  mem.VirtualMemoryWithContext,
+		swapMemory:     mem.SwapMemoryWithContext,
+		partitions:     disk.PartitionsWithContext,
+		diskUsage:      disk.UsageWithContext,
 	}
 }
 
@@ -280,29 +284,7 @@ func (c *Collector) collect(includeDetails bool) MetricsSnapshot {
 		if !includeDetails {
 			return
 		}
-		procs, err := process.ProcessesWithContext(ctx)
-		if err != nil {
-			return
-		}
-
-		var procInfos []ProcessInfo
-		for _, p := range procs {
-			name, err := p.NameWithContext(ctx)
-			if err != nil {
-				continue
-			}
-			cpuPercent, _ := p.CPUPercentWithContext(ctx)
-			memPercent, _ := p.MemoryPercentWithContext(ctx)
-
-			if cpuPercent > 0.1 || memPercent > 0.1 {
-				procInfos = append(procInfos, ProcessInfo{
-					PID:    p.Pid,
-					Name:   name,
-					CPU:    cpuPercent,
-					Memory: memPercent,
-				})
-			}
-		}
+		procInfos := c.collectProcesses(ctx)
 
 		mu.Lock()
 		snapshot.Processes = procInfos
@@ -698,10 +680,14 @@ func (m model) content() string {
 			if i >= 5 {
 				break
 			}
-			b.WriteString(fmt.Sprintf("  %s %s (CPU: %.1f%%, Mem: %.1f%%)\n",
+			cpuText := "Unavailable"
+			if p.CPUAvailable {
+				cpuText = fmt.Sprintf("%.1f%%", p.CPU)
+			}
+			b.WriteString(fmt.Sprintf("  %s %s (CPU: %s, Mem: %.1f%%)\n",
 				dimStyle.Render(fmt.Sprintf("[%d]", p.PID)),
 				valueStyle.Render(truncateString(p.Name, 20)),
-				p.CPU,
+				cpuText,
 				p.Memory,
 			))
 		}
@@ -734,8 +720,13 @@ func sortProcesses(processes []ProcessInfo, byMemory bool) {
 			if processes[i].Memory != processes[j].Memory {
 				return processes[i].Memory > processes[j].Memory
 			}
-		} else if processes[i].CPU != processes[j].CPU {
-			return processes[i].CPU > processes[j].CPU
+		} else {
+			if processes[i].CPUAvailable != processes[j].CPUAvailable {
+				return processes[i].CPUAvailable
+			}
+			if processes[i].CPUAvailable && processes[i].CPU != processes[j].CPU {
+				return processes[i].CPU > processes[j].CPU
+			}
 		}
 		return processes[i].PID < processes[j].PID
 	})

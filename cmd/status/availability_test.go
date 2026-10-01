@@ -15,6 +15,7 @@ import (
 
 func healthyCollector() *Collector {
 	c := NewCollector()
+	c.processSamples = func(context.Context) ([]processSample, error) { return nil, nil }
 	c.cpuPercent = func(context.Context, time.Duration, bool) ([]float64, error) { return []float64{0}, nil }
 	c.virtualMemory = func(context.Context) (*mem.VirtualMemoryStat, error) {
 		return &mem.VirtualMemoryStat{Total: 1024}, nil

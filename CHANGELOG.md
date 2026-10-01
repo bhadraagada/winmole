@@ -66,6 +66,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   require enough space to display the full target before accepting confirmation.
 - Analyzer and status launchers rebuild source checkouts when `go.mod` or
   `go.sum` is newer than the binary, applying dependency-only updates.
+- Process CPU ranking now measures usage between samples instead of averaging
+  over process lifetime, making recent spikes visible for long-running apps.
+  New, failed, reused-PID and reset-counter samples show as unavailable until
+  a valid interval can be measured. Memory sorting remains available.
 
 ## [0.1.1] - 2026-07-31
 

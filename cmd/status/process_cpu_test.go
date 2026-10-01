@@ -1,0 +1,149 @@
+//go:build windows
+
+package main
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+	"time"
+)
+
+func TestProcessCPUIntervalsAndBaselineRecovery(t *testing.T) {
+	now := time.Now()
+	c := NewCollector()
+	var samples []processSample
+	var readErr error
+	c.processSamples = func(context.Context) ([]processSample, error) { return samples, readErr }
+	for _, tc := range []struct {
+		name      string
+		created   int64
+		total     float64
+		second    int
+		readable  bool
+		present   bool
+		failed    bool
+		available bool
+		want      float64
+	}{
+		{name: "first", created: 1, total: 100, readable: true, present: true},
+		{name: "busy", created: 1, total: 104, second: 2, readable: true, present: true, available: true, want: 200},
+		{name: "idle", created: 1, total: 104, second: 4, readable: true, present: true, available: true},
+		{name: "missing CPU", created: 1, second: 6, present: true},
+		{name: "after missing", created: 1, total: 108, second: 8, readable: true, present: true},
+		{name: "recovered", created: 1, total: 109, second: 10, readable: true, present: true, available: true, want: 50},
+		{name: "reused PID", created: 2, total: 1, second: 12, readable: true, present: true},
+		{name: "new process busy", created: 2, total: 2, second: 14, readable: true, present: true, available: true, want: 50},
+		{name: "counter reset", created: 2, total: 0, second: 16, readable: true, present: true},
+		{name: "after reset", created: 2, total: 1, second: 18, readable: true, present: true, available: true, want: 50},
+		{name: "same timestamp", created: 2, total: 2, second: 18, readable: true, present: true},
+		{name: "backward timestamp", created: 2, total: 3, second: 17, readable: true, present: true},
+		{name: "exited"},
+		{name: "after exit", created: 2, total: 4, second: 20, readable: true, present: true},
+		{name: "enumeration error", failed: true},
+		{name: "after enumeration error", created: 2, total: 5, second: 22, readable: true, present: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			samples, readErr = nil, nil
+			if tc.present {
+				samples = []processSample{{info: ProcessInfo{PID: 7, Name: "app", Memory: 5, CPUAvailable: tc.readable}, created: tc.created, total: tc.total, at: now.Add(time.Duration(tc.second) * time.Second)}}
+			}
+			if tc.failed {
+				readErr = errors.New("process enumeration failed")
+			}
+			got := c.collectProcesses(context.Background())
+			if !tc.present {
+				if len(got) != 0 || len(c.prevProcesses) != 0 {
+					t.Fatal("missing processes retained output or baselines")
+				}
+				return
+			}
+			if len(got) != 1 || got[0].CPUAvailable != tc.available || got[0].CPU != tc.want || got[0].Memory != 5 {
+				t.Fatalf("process readings = %+v, want available=%v CPU=%v and memory retained", got, tc.available, tc.want)
+			}
+			if !tc.readable && len(c.prevProcesses) != 0 {
+				t.Fatal("failed CPU reading retained its baseline")
+			}
+		})
+	}
+}
+
+func TestProcessCPUUnavailableSortAndView(t *testing.T) {
+	processes := []ProcessInfo{
+		{PID: 1, Name: "unmeasured", CPU: 999, Memory: 80},
+		{PID: 2, Name: "idle", CPUAvailable: true, Memory: 1},
+		{PID: 3, Name: "busy", CPUAvailable: true, CPU: 200, Memory: 2},
+	}
+	sortProcesses(processes, false)
+	if processes[0].PID != 3 || processes[1].PID != 2 || processes[2].PID != 1 {
+		t.Fatalf("unavailable CPU outranked a measurement: %+v", processes)
+	}
+	m := newModel()
+	m.ready, m.metrics.Processes = true, processes
+	view := m.View()
+	for _, want := range []string{"unmeasured (CPU: Unavailable, Mem: 80.0%)", "idle (CPU: 0.0%", "busy (CPU: 200.0%"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("missing %q in view: %s", want, view)
+		}
+	}
+	sortProcesses(processes, true)
+	if processes[0].PID != 1 {
+		t.Fatal("unavailable CPU changed memory sorting")
+	}
+}
+
+func TestProcessCPUKeepsBaselineForFilteredProcesses(t *testing.T) {
+	c := NewCollector()
+	sample := processSample{info: ProcessInfo{PID: 7, CPUAvailable: true}, created: 1, at: time.Now()}
+	c.processSamples = func(context.Context) ([]processSample, error) { return []processSample{sample}, nil }
+	if got := c.collectProcesses(context.Background()); len(got) != 0 {
+		t.Fatal("idle process without significant memory should remain filtered")
+	}
+	sample.total, sample.at = 1, sample.at.Add(time.Second)
+	got := c.collectProcesses(context.Background())
+	if len(got) != 1 || !got[0].CPUAvailable || got[0].CPU != 100 {
+		t.Fatalf("filtered process lost its baseline before becoming busy: %+v", got)
+	}
+}
+
+func TestHealthOnlyCollectionSkipsProcesses(t *testing.T) {
+	c := healthyCollector()
+	c.processSamples = func(context.Context) ([]processSample, error) {
+		t.Error("health-only JSON collection queried processes")
+		return nil, nil
+	}
+	if got := c.collect(false); got.HealthScore != 100 || len(got.Processes) != 0 {
+		t.Fatalf("health-only collection changed: %+v", got)
+	}
+}
+
+func TestProcessCollectionSerializesOverlappingRefreshes(t *testing.T) {
+	c := NewCollector()
+	entered := make(chan struct{}, 2)
+	release := make(chan struct{})
+	finished := make(chan struct{}, 2)
+	c.processSamples = func(context.Context) ([]processSample, error) {
+		entered <- struct{}{}
+		<-release
+		return nil, nil
+	}
+	defer close(release)
+	go func() { c.collectProcesses(context.Background()); finished <- struct{}{} }()
+	<-entered
+	go func() { c.collectProcesses(context.Background()); finished <- struct{}{} }()
+	select {
+	case <-entered:
+		t.Fatal("process reads overlapped")
+	case <-time.After(50 * time.Millisecond):
+	}
+	release <- struct{}{}
+	<-finished
+	select {
+	case <-entered:
+	case <-time.After(time.Second):
+		t.Fatal("second collection did not resume")
+	}
+	release <- struct{}{}
+	<-finished
+}

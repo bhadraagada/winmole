@@ -180,6 +180,14 @@ on machines with many processors. Missing per-core readings show as unavailable.
 
 Press `m` in the status dashboard to switch the top five processes between CPU
 and memory usage. CPU is the default; the process heading shows the active sort.
+
+Process CPU usage measures the interval between successful samples, so recent
+spikes in long-running apps appear in the ranking. Listed processes with a first
+or failed sample show `Unavailable` until a new interval can be measured.
+Here, 100% means one logical processor fully occupied; a process using several
+processors can exceed
+100%. Memory percentages continue to describe the share of total RAM.
+
 Use `Up`/`Down` or `k`/`j` to scroll, `PgUp`/`PgDn` to move a page, and
 `Home`/`End` to jump to the first or last row. The dashboard wraps to the terminal
 width and keeps its controls visible, so lower sections and long health warnings

@@ -11,12 +11,12 @@ import (
 
 func TestProcessSortingToggle(t *testing.T) {
 	processes := []ProcessInfo{
-		{PID: 6, Name: "memory-heavy", CPU: 0, Memory: 80},
-		{PID: 5, Name: "cpu-fifth", CPU: 1, Memory: 1},
-		{PID: 4, Name: "cpu-fourth", CPU: 2, Memory: 1},
-		{PID: 3, Name: "cpu-third", CPU: 3, Memory: 1},
-		{PID: 2, Name: "cpu-second", CPU: 4, Memory: 1},
-		{PID: 1, Name: "cpu-first", CPU: 5, Memory: 1},
+		{PID: 6, Name: "memory-heavy", CPUAvailable: true, CPU: 0, Memory: 80},
+		{PID: 5, Name: "cpu-fifth", CPUAvailable: true, CPU: 1, Memory: 1},
+		{PID: 4, Name: "cpu-fourth", CPUAvailable: true, CPU: 2, Memory: 1},
+		{PID: 3, Name: "cpu-third", CPUAvailable: true, CPU: 3, Memory: 1},
+		{PID: 2, Name: "cpu-second", CPUAvailable: true, CPU: 4, Memory: 1},
+		{PID: 1, Name: "cpu-first", CPUAvailable: true, CPU: 5, Memory: 1},
 	}
 	m := newModel()
 	updated, cmd := m.Update(metricsMsg(MetricsSnapshot{Processes: processes}))
@@ -44,7 +44,7 @@ func TestProcessSortingToggle(t *testing.T) {
 
 	// A refreshed snapshot must preserve the user's chosen ordering.
 	updated, _ = m.Update(metricsMsg(MetricsSnapshot{Processes: []ProcessInfo{
-		{PID: 1, Name: "cpu-first", CPU: 90, Memory: 1},
+		{PID: 1, Name: "cpu-first", CPUAvailable: true, CPU: 90, Memory: 1},
 		{PID: 6, Name: "memory-heavy", Memory: 80},
 	}}))
 	m = updated.(model)
@@ -59,7 +59,7 @@ func TestProcessSortingToggle(t *testing.T) {
 }
 
 func TestProcessSortingEmptyAndCPUTies(t *testing.T) {
-	processes := []ProcessInfo{{PID: 20, CPU: 5}, {PID: 10, CPU: 5}}
+	processes := []ProcessInfo{{PID: 20, CPUAvailable: true, CPU: 5}, {PID: 10, CPUAvailable: true, CPU: 5}}
 	sortProcesses(processes, false)
 	if processes[0].PID != 10 {
 		t.Fatal("equal CPU usage should sort by PID")
