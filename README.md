@@ -187,7 +187,11 @@ or failed sample show `Unavailable` until a new interval can be measured.
 Here, 100% means one logical processor fully occupied; a process using several
 processors can exceed 100%. If a scan is interrupted before reaching a process,
 its next reading averages over the longer gap between successful samples.
-Memory percentages continue to describe the share of total RAM.
+Memory percentages describe the share of total RAM. A failed process-memory
+reading shows `Unavailable`; a measured zero remains `0.0%`. Memory sorting
+places measured readings first, and a successful refresh restores missing
+readings. A process appears only when a measured CPU or memory value exceeds
+0.1%, so a process with neither reading available is omitted.
 
 Use `Up`/`Down` or `k`/`j` to scroll, `PgUp`/`PgDn` to move a page, and
 `Home`/`End` to jump to the first or last row. The dashboard wraps to the terminal

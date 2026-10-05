@@ -47,7 +47,7 @@ func TestProcessCPUIntervalsAndBaselineRecovery(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			samples, readErr = nil, nil
 			if tc.present {
-				samples = []processSample{{info: ProcessInfo{PID: 7, Name: "app", Memory: 5, CPUAvailable: tc.readable}, created: tc.created, total: tc.total, at: now.Add(time.Duration(tc.second) * time.Second)}}
+				samples = []processSample{{info: ProcessInfo{PID: 7, Name: "app", MemoryAvailable: true, Memory: 5, CPUAvailable: tc.readable}, created: tc.created, total: tc.total, at: now.Add(time.Duration(tc.second) * time.Second)}}
 			}
 			if tc.failed {
 				readErr = errors.New("process enumeration failed")
@@ -74,7 +74,7 @@ func TestProcessCPUInterruptedScanPreservesUnvisitedBaselines(t *testing.T) {
 	now := time.Now()
 	makeSample := func(pid int32, second int, readable bool) processSample {
 		return processSample{
-			info:    ProcessInfo{PID: pid, Memory: 1, CPUAvailable: readable},
+			info:    ProcessInfo{PID: pid, MemoryAvailable: true, Memory: 1, CPUAvailable: readable},
 			created: 1, total: float64(second), at: now.Add(time.Duration(second) * time.Second),
 		}
 	}
@@ -123,9 +123,9 @@ func TestReadProcessSamplesReportsCanceledScan(t *testing.T) {
 
 func TestProcessCPUUnavailableSortAndView(t *testing.T) {
 	processes := []ProcessInfo{
-		{PID: 1, Name: "unmeasured", CPU: 999, Memory: 80},
-		{PID: 2, Name: "idle", CPUAvailable: true, Memory: 1},
-		{PID: 3, Name: "busy", CPUAvailable: true, CPU: 200, Memory: 2},
+		{PID: 1, Name: "unmeasured", CPU: 999, MemoryAvailable: true, Memory: 80},
+		{PID: 2, Name: "idle", CPUAvailable: true, MemoryAvailable: true, Memory: 1},
+		{PID: 3, Name: "busy", CPUAvailable: true, CPU: 200, MemoryAvailable: true, Memory: 2},
 	}
 	sortProcesses(processes, false)
 	if processes[0].PID != 3 || processes[1].PID != 2 || processes[2].PID != 1 {

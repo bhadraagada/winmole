@@ -60,8 +60,8 @@ func TestDashboardNavigationRefreshAndResize(t *testing.T) {
 		metricsMsg(MetricsSnapshot{
 			HealthMessage: strings.Repeat("Long warning ", 100),
 			Processes: []ProcessInfo{
-				{PID: 1, Name: "cpu-process", CPUAvailable: true, CPU: 80, Memory: 1},
-				{PID: 2, Name: "memory-process", CPUAvailable: true, CPU: 1, Memory: 80},
+				{PID: 1, Name: "cpu-process", CPUAvailable: true, CPU: 80, MemoryAvailable: true, Memory: 1},
+				{PID: 2, Name: "memory-process", CPUAvailable: true, CPU: 1, MemoryAvailable: true, Memory: 80},
 			},
 		}),
 		tea.WindowSizeMsg{Width: 60, Height: 15},

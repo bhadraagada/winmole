@@ -41,6 +41,7 @@ func readProcessSamples(ctx context.Context) ([]processSample, error) {
 		}
 		if memory, err := p.MemoryPercentWithContext(ctx); err == nil {
 			sample.info.Memory = memory
+			sample.info.MemoryAvailable = true
 		}
 		samples = append(samples, sample)
 	}
@@ -73,7 +74,7 @@ func (c *Collector) collectProcesses(ctx context.Context) []ProcessInfo {
 			}
 			current[info.PID] = sample
 		}
-		if info.CPU > 0.1 || info.Memory > 0.1 {
+		if (info.CPUAvailable && info.CPU > 0.1) || (info.MemoryAvailable && info.Memory > 0.1) {
 			infos = append(infos, info)
 		}
 	}

@@ -39,6 +39,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Failed process-memory readings now show as unavailable instead of zero.
+  Memory sorting places measured readings first, including measured zero;
+  a successful refresh restores missing readings.
 - The analyzer marks files it cannot stat as partial instead of reporting
   an apparently complete zero-byte measurement.
 - Analyzer input during a scan can no longer replace a parent listing with a
