@@ -96,11 +96,12 @@ type NetworkInfo struct {
 }
 
 type ProcessInfo struct {
-	PID          int32
-	Name         string
-	CPU          float64
-	CPUAvailable bool
-	Memory       float32
+	PID             int32
+	Name            string
+	CPU             float64
+	CPUAvailable    bool
+	Memory          float32
+	MemoryAvailable bool
 }
 
 // Collector
@@ -684,11 +685,15 @@ func (m model) content() string {
 			if p.CPUAvailable {
 				cpuText = fmt.Sprintf("%.1f%%", p.CPU)
 			}
-			b.WriteString(fmt.Sprintf("  %s %s (CPU: %s, Mem: %.1f%%)\n",
+			memoryText := "Unavailable"
+			if p.MemoryAvailable {
+				memoryText = fmt.Sprintf("%.1f%%", p.Memory)
+			}
+			b.WriteString(fmt.Sprintf("  %s %s (CPU: %s, Mem: %s)\n",
 				dimStyle.Render(fmt.Sprintf("[%d]", p.PID)),
 				valueStyle.Render(truncateString(p.Name, 20)),
 				cpuText,
-				p.Memory,
+				memoryText,
 			))
 		}
 		b.WriteString("\n")
@@ -717,7 +722,10 @@ func (m model) content() string {
 func sortProcesses(processes []ProcessInfo, byMemory bool) {
 	sort.Slice(processes, func(i, j int) bool {
 		if byMemory {
-			if processes[i].Memory != processes[j].Memory {
+			if processes[i].MemoryAvailable != processes[j].MemoryAvailable {
+				return processes[i].MemoryAvailable
+			}
+			if processes[i].MemoryAvailable && processes[i].Memory != processes[j].Memory {
 				return processes[i].Memory > processes[j].Memory
 			}
 		} else {

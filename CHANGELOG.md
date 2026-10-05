@@ -70,6 +70,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   over process lifetime, making recent spikes visible for long-running apps.
   New, failed, reused-PID and reset-counter samples show as unavailable until
   a valid interval can be measured. Memory sorting remains available.
+- Failed process-memory readings now show as unavailable instead of zero.
+  Memory sorting places measured readings first, including measured zero;
+  a successful refresh restores missing readings.
 
 ## [0.1.1] - 2026-07-31
 
