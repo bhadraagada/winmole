@@ -149,13 +149,32 @@ func isProtectedPath(path string) bool {
 
 // Entry types
 type dirEntry struct {
-	Name        string
-	Path        string
-	Size        int64
-	IsDir       bool
-	LastAccess  time.Time
-	IsCleanable bool
-	Partial     bool // Size is a lower bound: the walk hit the timeout or an unreadable subtree
+	Name           string
+	Path           string
+	Size           int64
+	IsDir          bool
+	LastAccess     time.Time
+	IsCleanable    bool
+	Partial        bool // Size is a lower bound when the scan could not finish.
+	PartialReasons partialReasons
+}
+
+type partialReasons uint32
+
+const (
+	partialTimeout = 1 << iota
+	partialFileLimit
+	partialReadError
+)
+
+func (reasons partialReasons) codes() []string {
+	var codes []string
+	for i, code := range []string{"timeout", "file_limit", "read_error"} {
+		if reasons&(1<<i) != 0 {
+			codes = append(codes, code)
+		}
+	}
+	return codes
 }
 
 type fileEntry struct {
@@ -846,10 +865,10 @@ func scanDirectory(path string) ([]dirEntry, []fileEntry, int64, error) {
 			var size int64
 			var lastAccess time.Time
 			var isCleanable bool
-			var partial bool
+			var reasons partialReasons
 
 			if isDir {
-				size, partial = calculateDirSize(entryPath)
+				size, reasons = calculateDirSize(entryPath)
 				isCleanable = cleanablePatterns[name]
 			} else {
 				info, err := os.Stat(entryPath)
@@ -857,7 +876,7 @@ func scanDirectory(path string) ([]dirEntry, []fileEntry, int64, error) {
 					size = info.Size()
 					lastAccess = info.ModTime()
 				} else {
-					partial = true
+					reasons = partialReadError
 				}
 			}
 
@@ -865,13 +884,14 @@ func scanDirectory(path string) ([]dirEntry, []fileEntry, int64, error) {
 			defer mu.Unlock()
 
 			dirEntries = append(dirEntries, dirEntry{
-				Name:        name,
-				Path:        entryPath,
-				Size:        size,
-				IsDir:       isDir,
-				LastAccess:  lastAccess,
-				IsCleanable: isCleanable,
-				Partial:     partial,
+				Name:           name,
+				Path:           entryPath,
+				Size:           size,
+				IsDir:          isDir,
+				LastAccess:     lastAccess,
+				IsCleanable:    isCleanable,
+				Partial:        reasons != 0,
+				PartialReasons: reasons,
 			})
 
 			totalSize += size
@@ -915,22 +935,21 @@ func isReparsePoint(info os.FileInfo) bool {
 }
 
 // calculateDirSize returns the total size of a directory tree. The second
-// result reports whether the walk was cut short by the timeout or the file
-// guard, in which case the size is a lower bound rather than the real total.
-func calculateDirSize(path string) (int64, bool) {
+// result identifies why the size is a lower bound rather than the real total.
+func calculateDirSize(path string) (int64, partialReasons) {
 	ctx, cancel := context.WithTimeout(context.Background(), dirSizeTimeout)
 	defer cancel()
 
 	var size int64
 	var fileCount int64
-	var truncated atomic.Bool
+	var reasons atomic.Uint32
 
 	// Use a channel to signal completion
 	done := make(chan struct{})
 
 	go func() {
 		defer close(done)
-		walkDirSize(ctx, path, &size, &fileCount, &truncated)
+		walkDirSize(ctx, path, &size, &fileCount, &reasons)
 	}()
 
 	select {
@@ -938,10 +957,10 @@ func calculateDirSize(path string) (int64, bool) {
 		// Completed normally
 	case <-ctx.Done():
 		// Timeout - return partial size (already accumulated)
-		truncated.Store(true)
+		reasons.Or(partialTimeout)
 	}
 
-	return atomic.LoadInt64(&size), truncated.Load()
+	return atomic.LoadInt64(&size), partialReasons(reasons.Load())
 }
 
 // walkDirSize sums every file in a directory tree. It walks to full depth and
@@ -950,18 +969,18 @@ func calculateDirSize(path string) (int64, bool) {
 // example AppData\Local\Microsoft\Windows, which matched the bare name
 // "Windows" at every level). Dot-directories are counted too; .gradle, .nuget
 // and friends are often the largest thing in a user profile.
-func walkDirSize(ctx context.Context, path string, size *int64, fileCount *int64, truncated *atomic.Bool) {
+func walkDirSize(ctx context.Context, path string, size *int64, fileCount *int64, reasons *atomic.Uint32) {
 	// Check context cancellation
 	select {
 	case <-ctx.Done():
-		truncated.Store(true)
+		reasons.Or(partialTimeout)
 		return
 	default:
 	}
 
 	// Limit total files scanned
 	if atomic.LoadInt64(fileCount) > maxFilesPerDir {
-		truncated.Store(true)
+		reasons.Or(partialFileLimit)
 		return
 	}
 
@@ -969,7 +988,7 @@ func walkDirSize(ctx context.Context, path string, size *int64, fileCount *int64
 	if err != nil {
 		// Unreadable subtree (permissions, locked file): its contents are
 		// missing from the total, so the caller must not trust the number.
-		truncated.Store(true)
+		reasons.Or(partialReadError)
 		return
 	}
 
@@ -977,13 +996,13 @@ func walkDirSize(ctx context.Context, path string, size *int64, fileCount *int64
 		// Check cancellation
 		select {
 		case <-ctx.Done():
-			truncated.Store(true)
+			reasons.Or(partialTimeout)
 			return
 		default:
 		}
 
 		if atomic.LoadInt64(fileCount) > maxFilesPerDir {
-			truncated.Store(true)
+			reasons.Or(partialFileLimit)
 			return
 		}
 
@@ -991,7 +1010,7 @@ func walkDirSize(ctx context.Context, path string, size *int64, fileCount *int64
 
 		info, err := entry.Info()
 		if err != nil {
-			truncated.Store(true)
+			reasons.Or(partialReadError)
 			continue
 		}
 
@@ -999,7 +1018,7 @@ func walkDirSize(ctx context.Context, path string, size *int64, fileCount *int64
 			if isReparsePoint(info) {
 				continue
 			}
-			walkDirSize(ctx, entryPath, size, fileCount, truncated)
+			walkDirSize(ctx, entryPath, size, fileCount, reasons)
 		} else {
 			atomic.AddInt64(size, info.Size())
 			atomic.AddInt64(fileCount, 1)

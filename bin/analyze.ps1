@@ -47,6 +47,7 @@ function Show-AnalyzeHelp {
     Write-Host ""
     Write-Host "    ${cyan}path${nc}    Directory to analyze (default: current directory)"
     Write-Host "    ${cyan}-Json${nc}   Write a read-only JSON report without opening the TUI"
+    Write-Host "            Partial sizes include timeout, file_limit, or read_error reasons"
     Write-Host ""
     Write-Host "  ${green}CONTROLS:${nc}"
     Write-Host ""

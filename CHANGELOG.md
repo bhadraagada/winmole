@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Analyzer JSON reports explain incomplete sizes with `partial_reasons` for
+  timeouts, file limits, and read errors, per entry and across the report.
 - `winmole analyze [path] -Json` and `analyze.exe -json` produce read-only,
   machine-readable disk usage reports with byte counts and partial-scan flags.
   Reports work without an interactive terminal and preserve literal paths.
