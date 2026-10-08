@@ -37,6 +37,7 @@ function Show-AnalyzeHelp {
     Write-Host "  ${green}ANALYZE${nc} - Disk Space Analyzer"
     Write-Host ""
     Write-Host "  ${gray}Interactive TUI for exploring disk usage${nc}"
+    Write-Host "  ${gray}A + marks a partial size; highlight it to see why above the controls${nc}"
     Write-Host ""
     Write-Host "  ${green}USAGE:${nc}"
     Write-Host ""

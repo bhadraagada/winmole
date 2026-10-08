@@ -39,6 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Analyzer JSON reports explain incomplete sizes with `partial_reasons` for
   timeouts, file limits, and read errors, per entry and across the report.
+  The interactive analyzer shows the highlighted entry's causes above its
+  controls, including in a 40-column window.
 
 ### Fixed
 

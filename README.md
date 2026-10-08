@@ -132,6 +132,11 @@ the listing and reports how many files are hidden. Enlarge windows smaller than
 40 columns by 9 rows to browse. A delete confirmation displays its full target;
 if it cannot fit, resize before confirming or press `n`/`Esc` to cancel.
 
+Partial sizes carry a `+` because they are lower bounds. Highlight an entry to
+see its observed causes above the controls: `timeout`, `file limit`, or
+`read error`. More than one cause can appear. These mean the scan reached its
+time budget, reached its file-count limit, or could not read part of the entry.
+
 ### Save a disk usage report
 
 ```powershell
@@ -161,7 +166,8 @@ Partial entries also include `partial_reasons`, an array containing `timeout`,
 report's `partial_reasons` combines the observed reasons from all entries,
 without duplicates, in that order. Complete scans omit this field. Reasons
 describe what the scan encountered; an early stop can leave other problems
-undiscovered. The interactive analyzer continues to mark partial sizes with `+`.
+undiscovered. The interactive analyzer displays these reasons for the highlighted
+partial entry above its controls.
 
 ### Live System Status
 

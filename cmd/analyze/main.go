@@ -694,7 +694,15 @@ func (m model) View() string {
 		}
 		lines = append(lines, prefix+nameColor+truncatePath(entry.Name, width-ansi.StringWidth(prefix))+colorReset)
 	}
-	return strings.Join(append(lines, "", footer), "\n")
+	status := ""
+	if m.selected >= 0 && m.selected < len(m.entries) && m.entries[m.selected].Partial {
+		reasons := strings.ReplaceAll(strings.Join(m.entries[m.selected].PartialReasons.codes(), ", "), "_", " ")
+		if reasons == "" {
+			reasons = "scan incomplete"
+		}
+		status = colorYellow + "Partial: " + reasons + colorReset
+	}
+	return strings.Join(append(lines, status, footer), "\n")
 }
 
 // listingLayout shares the rendered row budget with keyboard paging.
