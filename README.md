@@ -180,6 +180,9 @@ on machines with many processors. Missing per-core readings show as unavailable.
 
 Press `m` in the status dashboard to switch the top five processes between CPU
 and memory usage. CPU is the default; the process heading shows the active sort.
+Press `a` to show all collected active processes or return to the top five.
+Scroll to inspect processes below the first five. This choice persists through
+sorting and refreshes; the same activity threshold described below still applies.
 
 Process CPU usage measures the interval between successful samples, so recent
 spikes in long-running apps appear in the ranking. Listed processes with a first

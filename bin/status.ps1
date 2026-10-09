@@ -56,6 +56,7 @@ function Show-StatusHelp {
     Write-Host "    ${cyan}PgUp/PgDn${nc}  Scroll one page"
     Write-Host "    ${cyan}Home/End${nc}   Jump to the top/bottom"
     Write-Host "    ${cyan}m${nc}          Toggle process sorting: CPU/memory"
+    Write-Host "    ${cyan}a${nc}          Toggle top five/all collected active processes"
     Write-Host "    ${cyan}p${nc}          Show/hide logical processor usage (CPU 0 onward)"
     Write-Host "    ${cyan}c${nc}          Toggle WinMole animation"
     Write-Host "    ${cyan}r${nc}          Refresh now"
