@@ -76,6 +76,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Failed process-memory readings now show as unavailable instead of zero.
   Memory sorting places measured readings first, including measured zero;
   a successful refresh restores missing readings.
+- Analyzer refresh now discards saved scans, so returning to a parent or
+  reopening a child cannot restore old file lists and totals. The existing
+  refresh after a successful deletion also discards saved scans.
 
 ## [0.1.1] - 2026-07-31
 

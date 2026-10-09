@@ -106,6 +106,12 @@ starting directory, the same keys scan its parent, so you can explore above the
 path you launched with. While a scan runs, wait for it to finish or press `q` or
 `Ctrl+C` to quit.
 
+Press `r` to rescan the current directory and discard saved scans. Returning to
+a parent or reopening a previously visited directory then scans it again, so
+old file lists and totals do not reappear after a refresh. Ordinary navigation
+reuses saved scans until the next refresh. Back restores the highlighted directory
+if it still exists. A successful deletion also discards saved scans.
+
 Use `PgUp`/`PgDn` to move one visible listing page and `Home`/`End` to jump to
 the first or last entry. The `g`/`G` shortcuts also jump to the first or last
 entry. Page size follows the terminal height and the space used by the
