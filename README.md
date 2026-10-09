@@ -132,13 +132,18 @@ the listing and reports how many files are hidden. Enlarge windows smaller than
 40 columns by 9 rows to browse. A delete confirmation displays its full target;
 if it cannot fit, resize before confirming or press `n`/`Esc` to cancel.
 
+Partial sizes carry a `+` because they are lower bounds. Highlight an entry to
+see its observed causes above the controls: `timeout`, `file limit`, or
+`read error`. More than one cause can appear. These mean the scan reached its
+time budget, reached its file-count limit, or could not read part of the entry.
+
 ### Save a disk usage report
 
 ```powershell
 # Read-only scan, with no interactive terminal or deletion commands
 .\winmole.ps1 analyze 'C:\Projects' -Json | Set-Content -Encoding UTF8 usage.json
 $report = Get-Content -Raw usage.json | ConvertFrom-Json
-$report.entries | Select-Object name, size_bytes, partial
+$report.entries | Select-Object name, size_bytes, partial, partial_reasons
 
 # Standalone binary: put flags before a positional path
 .\bin\analyze.exe -json -path 'C:\Projects'
@@ -155,6 +160,14 @@ a scan timed out, hit its file limit, or could not read an entry. The report's
 `partial` flag is true if any entry is partial. Invalid or unreadable root
 directories return a nonzero exit code and an error on stderr. Reports use the
 same scan limits as the interactive analyzer.
+
+Partial entries also include `partial_reasons`, an array containing `timeout`,
+`file_limit`, or `read_error`. An entry can have more than one reason. The
+report's `partial_reasons` combines the observed reasons from all entries,
+without duplicates, in that order. Complete scans omit this field. Reasons
+describe what the scan encountered; an early stop can leave other problems
+undiscovered. The interactive analyzer displays these reasons for the highlighted
+partial entry above its controls.
 
 ### Live System Status
 

@@ -53,6 +53,42 @@ func TestJSONReport(t *testing.T) {
 	if !strings.Contains(previous, `"partial":false`) || !strings.Contains(previous, `"is_directory":false`) {
 		t.Fatalf("false values must be explicit: %s", previous)
 	}
+	if strings.Contains(previous, `"partial_reasons"`) {
+		t.Fatalf("complete report must omit partial reasons: %s", previous)
+	}
+}
+
+func TestJSONReportPartialReasons(t *testing.T) {
+	entries := []dirEntry{
+		{Name: "read", Size: 2, Partial: true, PartialReasons: partialReadError},
+		{Name: "complete", Size: 1},
+		{Name: "limited", Size: 4, Partial: true, PartialReasons: partialReadError | partialFileLimit},
+		{Name: "timed", Size: 3, Partial: true, PartialReasons: partialTimeout},
+	}
+	data, err := json.Marshal(newDiskReport("fixture", entries, 10))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got diskReport
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"timeout", "file_limit", "read_error"}
+	if !got.Partial || got.TotalBytes != 10 || !reflect.DeepEqual(got.PartialReasons, want) {
+		t.Fatalf("report lost sizes or stable deduplicated causes: %s", data)
+	}
+	wantEntries := []reportEntry{
+		{Name: "limited", SizeBytes: 4, Partial: true, PartialReasons: []string{"file_limit", "read_error"}},
+		{Name: "timed", SizeBytes: 3, Partial: true, PartialReasons: []string{"timeout"}},
+		{Name: "read", SizeBytes: 2, Partial: true, PartialReasons: []string{"read_error"}},
+		{Name: "complete", SizeBytes: 1},
+	}
+	if !reflect.DeepEqual(got.Entries, wantEntries) {
+		t.Fatalf("entry reasons/sorting = %#v, want %#v", got.Entries, wantEntries)
+	}
+	if !reflect.DeepEqual(entries[0].PartialReasons.codes(), []string{"read_error"}) {
+		t.Fatal("report aggregation mutated an entry's causes")
+	}
 }
 
 func TestJSONReportEmptyAndErrors(t *testing.T) {
@@ -104,6 +140,9 @@ func TestJSONReportMarksUnreadableEntryPartial(t *testing.T) {
 	}
 	if !got.Partial || len(got.Entries) != 1 || !got.Entries[0].Partial {
 		t.Fatalf("unreadable entry must mark both entry and report partial: %s", output.String())
+	}
+	if !reflect.DeepEqual(got.PartialReasons, []string{"read_error"}) || !reflect.DeepEqual(got.Entries[0].PartialReasons, []string{"read_error"}) {
+		t.Fatalf("unreadable entry must explain both partial flags: %s", output.String())
 	}
 }
 
