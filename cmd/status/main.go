@@ -401,6 +401,7 @@ type model struct {
 	animFrame    int
 	catHidden    bool
 	showPerCore  bool
+	showAllProcs bool
 	sortByMemory bool
 	ready        bool
 	collecting   bool
@@ -450,6 +451,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.catHidden = !m.catHidden
 		case "p":
 			m.showPerCore = !m.showPerCore
+		case "a":
+			m.showAllProcs = !m.showAllProcs
 		case "up", "k":
 			m.scroll--
 		case "down", "j":
@@ -512,7 +515,7 @@ func (m model) View() string {
 func (m model) layout() (lines, footer []string, height int) {
 	footer = []string{
 		"[↑/↓ j/k] scroll [PgUp/PgDn] page [Home/End]",
-		"[q] quit [r] refresh [m] sort [p] cores [c] mascot",
+		"[q] quit [r] refresh [m] sort [a] all [p] cores [c] mascot",
 	}
 	content := strings.Trim(m.content(), "\n")
 	if !m.sized {
@@ -675,10 +678,14 @@ func (m model) content() string {
 		if m.sortByMemory {
 			order = "Memory"
 		}
-		b.WriteString(headerStyle.Render("  📊 Top Processes by " + order))
+		group := "Top Processes by "
+		if m.showAllProcs {
+			group = "Active Processes by "
+		}
+		b.WriteString(headerStyle.Render("  📊 " + group + order))
 		b.WriteString("\n")
 		for i, p := range m.metrics.Processes {
-			if i >= 5 {
+			if i >= 5 && !m.showAllProcs {
 				break
 			}
 			cpuText := "Unavailable"
