@@ -45,7 +45,7 @@ function Show-StatusHelp {
     Write-Host "    ${cyan}Memory${nc}     RAM usage and availability"
     Write-Host "    ${cyan}Disk${nc}       Drive usage and free space"
     Write-Host "    ${cyan}Network${nc}    Bytes sent/received per interface"
-    Write-Host "    ${cyan}Processes${nc}  Top five or all collected active processes, sorted by CPU/memory"
+    Write-Host "    ${cyan}Processes${nc}  Top five by CPU or memory usage"
     Write-Host "               CPU measures usage between samples; first/failed samples are unavailable"
     Write-Host "               100% CPU = one logical processor; multi-core use can exceed 100%"
     Write-Host "               Failed process memory readings are unavailable; memory sort puts readings first"
