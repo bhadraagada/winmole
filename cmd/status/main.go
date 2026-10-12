@@ -398,6 +398,8 @@ func calculateHealthScore(s MetricsSnapshot) (int, string) {
 type model struct {
 	collector    *Collector
 	metrics      MetricsSnapshot
+	paused       bool
+	pending      *MetricsSnapshot
 	animFrame    int
 	catHidden    bool
 	showPerCore  bool
@@ -447,6 +449,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
+		case " ":
+			if m.ready {
+				m.paused = !m.paused
+				if !m.paused && m.pending != nil {
+					m.metrics = *m.pending
+					m.pending = nil
+					sortProcesses(m.metrics.Processes, m.sortByMemory)
+				}
+			}
 		case "c":
 			m.catHidden = !m.catHidden
 		case "p":
@@ -490,9 +501,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tickCmd()
 	case metricsMsg:
-		m.metrics = MetricsSnapshot(msg)
-		sortProcesses(m.metrics.Processes, m.sortByMemory)
-		m.ready = true
+		if m.paused {
+			// Keep sampling CPU/network intervals while the user inspects a snapshot.
+			snapshot := MetricsSnapshot(msg)
+			m.pending = &snapshot
+		} else {
+			m.metrics = MetricsSnapshot(msg)
+			sortProcesses(m.metrics.Processes, m.sortByMemory)
+			m.ready = true
+		}
 		m.collecting = false
 	}
 	lines, _, height := m.layout()
@@ -513,8 +530,12 @@ func (m model) View() string {
 }
 
 func (m model) layout() (lines, footer []string, height int) {
+	pauseControl := "pause"
+	if m.paused {
+		pauseControl = "resume (paused)"
+	}
 	footer = []string{
-		"[↑/↓ j/k] scroll [PgUp/PgDn] page [Home/End]",
+		"[↑↓] scroll [PgUp/PgDn] [Home/End] [Space] " + pauseControl,
 		"[q] quit [r] refresh [m] sort [a] all [p] cores [c] mascot",
 	}
 	content := strings.Trim(m.content(), "\n")
@@ -529,7 +550,11 @@ func (m model) layout() (lines, footer []string, height int) {
 		return nil, []string{"q"}, 0
 	}
 	if m.width < lipgloss.Width(strings.Join(footer, "\n")) || m.height < 4 {
-		footer = []string{ansi.Truncate("q quit | ↑/↓ scroll", m.width, "")}
+		controls := "q quit ↑↓ scroll | Space pause"
+		if m.paused {
+			controls = "q quit ↑↓ scroll | paused Space resume"
+		}
+		footer = []string{ansi.Truncate(controls, m.width, "")}
 	}
 	for i := range footer {
 		footer[i] = dimStyle.Render(footer[i])
@@ -555,6 +580,10 @@ func (m model) content() string {
 	b.WriteString("  ")
 	b.WriteString(winmoleFrame)
 	b.WriteString("\n\n")
+	if m.paused {
+		b.WriteString(warnStyle.Render("  Display paused. Space resumes."))
+		b.WriteString("\n\n")
+	}
 
 	// Health score
 	healthColor := okStyle
