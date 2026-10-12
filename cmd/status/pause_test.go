@@ -111,7 +111,7 @@ func TestPauseKeepsScheduledSampling(t *testing.T) {
 }
 
 func TestPausedViewportAndResumeClamp(t *testing.T) {
-	for _, size := range []tea.WindowSizeMsg{{Width: 40, Height: 9}, {Width: 60, Height: 15}, {Width: 80, Height: 24}, {Width: 10, Height: 3}, {Width: 1, Height: 1}, {Width: 0, Height: 0}} {
+	for _, size := range []tea.WindowSizeMsg{{Width: 40, Height: 9}, {Width: 60, Height: 15}, {Width: 80, Height: 24}, {Width: 18, Height: 9}, {Width: 10, Height: 3}, {Width: 1, Height: 1}, {Width: 0, Height: 0}} {
 		t.Run(fmt.Sprintf("%dx%d", size.Width, size.Height), func(t *testing.T) {
 			processes := make([]ProcessInfo, 30)
 			for i := range processes {
@@ -135,14 +135,20 @@ func TestPausedViewportAndResumeClamp(t *testing.T) {
 			} else if view != "" {
 				t.Fatal("zero-sized terminal must remain empty")
 			}
-			if size.Width >= 40 {
+			if size.Width >= 18 {
 				_, footer, _ := m.layout()
 				controls := ansi.Strip(strings.Join(footer, "\n"))
-				for _, text := range []string{"paused", "Space", "quit", "scroll"} {
+				wanted := []string{"paused", "quit"}
+				if size.Width >= 40 {
+					wanted = append(wanted, "Space", "scroll")
+				}
+				for _, text := range wanted {
 					if !strings.Contains(controls, text) {
 						t.Fatalf("scrolled paused footer lacks %q: %s", text, controls)
 					}
 				}
+			}
+			if size.Width >= 40 {
 				if !strings.Contains(view, "process-30") || m.metrics.Hostname == "shorter" {
 					t.Fatal("paused scrolling must retain the original process list")
 				}

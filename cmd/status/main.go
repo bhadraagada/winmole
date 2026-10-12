@@ -552,7 +552,7 @@ func (m model) layout() (lines, footer []string, height int) {
 	if m.width < lipgloss.Width(strings.Join(footer, "\n")) || m.height < 4 {
 		controls := "q quit ↑↓ scroll | Space pause"
 		if m.paused {
-			controls = "q quit ↑↓ scroll | paused Space resume"
+			controls = "paused | q quit ↑↓ scroll | Space resume"
 		}
 		footer = []string{ansi.Truncate(controls, m.width, "")}
 	}
