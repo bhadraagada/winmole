@@ -184,6 +184,12 @@ Press `a` to show all collected active processes or return to the top five.
 Scroll to inspect processes below the first five. This choice persists through
 sorting and refreshes; the same activity threshold described below still applies.
 
+Press `Space` to pause the displayed snapshot while inspecting processes or
+other readings. Scrolling, sorting, and display toggles still work. Background
+sampling continues, including when you press `r`, so CPU sample intervals stay
+intact. Press `Space` again to show the latest received snapshot and resume live
+updates. Pause becomes available after the first snapshot loads.
+
 Process CPU usage measures the interval between successful samples, so recent
 spikes in long-running apps appear in the ranking. Listed processes with a first
 or failed sample show `Unavailable` until a new interval can be measured.

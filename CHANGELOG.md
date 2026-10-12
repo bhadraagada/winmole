@@ -39,6 +39,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Press `a` in the status dashboard to show all collected active processes,
   including those below the default top five. The expanded list supports
   scrolling and keeps its display choice through sorting and refreshes.
+- Press `Space` in the status dashboard to hold the displayed snapshot while
+  inspecting processes and other readings. Sampling continues in the background;
+  resuming shows the latest received snapshot with the current sort and display choices.
 
 ### Fixed
 
