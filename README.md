@@ -208,6 +208,11 @@ width and keeps its controls visible, so lower sections and long health warnings
 remain reachable in a short window. Very small windows show compact controls;
 enlarge a one-column or one-row window to read metrics.
 
+The `Sample started` line shows when collection of the displayed snapshot began,
+with its full date, time, and UTC offset. The time stays fixed while paused and
+changes with the displayed snapshot on resume or refresh. It is not the completion
+time of every individual measurement. A missing timestamp shows `Unavailable`.
+
 Each drive shows its used and total capacity, usage percentage, and free space
 beside the usage bar. Free space updates with each metrics refresh.
 
