@@ -579,6 +579,12 @@ func (m model) content() string {
 	b.WriteString(titleStyle.Render("  🐹 WinMole System Status"))
 	b.WriteString("  ")
 	b.WriteString(winmoleFrame)
+	b.WriteString("\n")
+	sampleStarted := "Unavailable"
+	if !m.metrics.CollectedAt.IsZero() {
+		sampleStarted = m.metrics.CollectedAt.Format("2006-01-02 15:04:05 -0700")
+	}
+	b.WriteString(dimStyle.Render("  Sample started: " + sampleStarted))
 	b.WriteString("\n\n")
 	if m.paused {
 		b.WriteString(warnStyle.Render("  Display paused. Space resumes."))

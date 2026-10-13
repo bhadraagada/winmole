@@ -43,6 +43,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   inspecting processes and other readings. Sampling continues in the background;
   resuming shows the latest received snapshot with the current sort and display choices.
 
+- The status dashboard shows the displayed snapshot's collection start date,
+  time, and UTC offset, so paused readings can be matched to logs. Missing
+  timestamps show as unavailable; the time follows the displayed snapshot.
+
 ### Fixed
 
 - The analyzer marks files it cannot stat as partial instead of reporting

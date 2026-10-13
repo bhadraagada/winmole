@@ -57,6 +57,7 @@ function Show-StatusHelp {
     Write-Host "    ${cyan}Home/End${nc}   Jump to the top/bottom"
     Write-Host "    ${cyan}Space${nc}      Pause/resume the displayed snapshot after loading"
     Write-Host "               Sampling continues while paused; resume shows the latest received snapshot"
+    Write-Host "               Sample started shows the displayed snapshot's collection start, date/time and UTC offset"
     Write-Host "    ${cyan}m${nc}          Toggle process sorting: CPU/memory"
     Write-Host "    ${cyan}a${nc}          Toggle top five/all collected active processes"
     Write-Host "    ${cyan}p${nc}          Show/hide logical processor usage (CPU 0 onward)"
