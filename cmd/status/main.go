@@ -73,7 +73,8 @@ type MetricsSnapshot struct {
 	Networks []NetworkInfo
 
 	// Processes
-	Processes []ProcessInfo
+	Processes             []ProcessInfo
+	ProcessScanIncomplete bool
 }
 
 type DiskInfo struct {
@@ -285,10 +286,11 @@ func (c *Collector) collect(includeDetails bool) MetricsSnapshot {
 		if !includeDetails {
 			return
 		}
-		procInfos := c.collectProcesses(ctx)
+		procInfos, err := c.collectProcesses(ctx)
 
 		mu.Lock()
 		snapshot.Processes = procInfos
+		snapshot.ProcessScanIncomplete = err != nil
 		mu.Unlock()
 	}()
 
@@ -708,7 +710,7 @@ func (m model) content() string {
 	b.WriteString("\n")
 
 	// Top Processes
-	if len(m.metrics.Processes) > 0 {
+	if len(m.metrics.Processes) > 0 || m.metrics.ProcessScanIncomplete {
 		order := "CPU"
 		if m.sortByMemory {
 			order = "Memory"
@@ -719,6 +721,10 @@ func (m model) content() string {
 		}
 		b.WriteString(headerStyle.Render("  📊 " + group + order))
 		b.WriteString("\n")
+		if m.metrics.ProcessScanIncomplete {
+			b.WriteString(warnStyle.Render("  Process scan incomplete. Some processes may be missing."))
+			b.WriteString("\n")
+		}
 		for i, p := range m.metrics.Processes {
 			if i >= 5 && !m.showAllProcs {
 				break
