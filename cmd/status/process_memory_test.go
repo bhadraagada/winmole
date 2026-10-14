@@ -28,8 +28,8 @@ func TestProcessMemoryFailureZeroAndRecovery(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			sample.at, sample.total = sample.at.Add(time.Second), sample.total+1
 			sample.info.Memory, sample.info.MemoryAvailable = tc.memory, tc.available
-			got := c.collectProcesses(context.Background())
-			if len(got) != 1 || got[0].MemoryAvailable != tc.available || got[0].Memory != tc.memory || !got[0].CPUAvailable || got[0].CPU != 100 {
+			got, err := c.collectProcesses(context.Background())
+			if err != nil || len(got) != 1 || got[0].MemoryAvailable != tc.available || got[0].Memory != tc.memory || !got[0].CPUAvailable || got[0].CPU != 100 {
 				t.Fatalf("memory state changed CPU sampling or retained stale memory: %+v", got)
 			}
 			m := newModel()
@@ -71,8 +71,8 @@ func TestProcessEligibilityRequiresAvailableMemory(t *testing.T) {
 			{info: ProcessInfo{PID: 4, CPU: 99}},
 		}, nil
 	}
-	got := c.collectProcesses(context.Background())
-	if len(got) != 1 || got[0].PID != 3 || !got[0].MemoryAvailable || got[0].CPUAvailable {
+	got, err := c.collectProcesses(context.Background())
+	if err != nil || len(got) != 1 || got[0].PID != 3 || !got[0].MemoryAvailable || got[0].CPUAvailable {
 		t.Fatalf("eligibility must require available CPU or memory over 0.1%%: %+v", got)
 	}
 }

@@ -202,6 +202,10 @@ places measured readings first, and a successful refresh restores missing
 readings. A process appears only when a measured CPU or memory value exceeds
 0.1%, so a process with neither reading available is omitted.
 
+If the process scan fails or is interrupted, the dashboard warns that some
+processes may be missing. Available rows remain visible. A successful scan clears
+the warning. While paused, the warning stays with the displayed snapshot.
+
 Use `Up`/`Down` or `k`/`j` to scroll, `PgUp`/`PgDn` to move a page, and
 `Home`/`End` to jump to the first or last row. The dashboard wraps to the terminal
 width and keeps its controls visible, so lower sections and long health warnings

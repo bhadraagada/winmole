@@ -48,7 +48,7 @@ func readProcessSamples(ctx context.Context) ([]processSample, error) {
 	return samples, ctx.Err()
 }
 
-func (c *Collector) collectProcesses(ctx context.Context) []ProcessInfo {
+func (c *Collector) collectProcesses(ctx context.Context) ([]ProcessInfo, error) {
 	// Keep samples ordered even when manual and scheduled refreshes overlap.
 	// A separate lock leaves network sampling independent of process queries.
 	c.processMu.Lock()
@@ -80,5 +80,5 @@ func (c *Collector) collectProcesses(ctx context.Context) []ProcessInfo {
 	}
 	// Complete scans prune exited processes; failed CPU readings always reset.
 	c.prevProcesses = current
-	return infos
+	return infos, err
 }

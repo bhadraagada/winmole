@@ -49,6 +49,7 @@ function Show-StatusHelp {
     Write-Host "               CPU measures usage between samples; first/failed samples are unavailable"
     Write-Host "               100% CPU = one logical processor; multi-core use can exceed 100%"
     Write-Host "               Failed process memory readings are unavailable; memory sort puts readings first"
+    Write-Host "               Failed/interrupted process scans warn that some processes may be missing"
     Write-Host ""
     Write-Host "  ${green}CONTROLS:${nc}"
     Write-Host ""

@@ -62,6 +62,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   network names.
 - Long paths in the analyzer's large-file list now preserve Unicode characters
   and the filename suffix while fitting the available display width.
+- The status dashboard warns when a process scan fails or is interrupted,
+  retaining available process rows instead of silently showing an incomplete list.
+  The warning clears after a successful scan and follows the displayed snapshot
+  while paused.
 - Disk health now uses the fullest drive, so an earlier low-space warning cannot
   hide a critically full secondary drive. Existing thresholds and penalties remain.
 - First-time analyzer, status, and script builds now tolerate Go download progress

@@ -52,7 +52,10 @@ func TestProcessCPUIntervalsAndBaselineRecovery(t *testing.T) {
 			if tc.failed {
 				readErr = errors.New("process enumeration failed")
 			}
-			got := c.collectProcesses(context.Background())
+			got, err := c.collectProcesses(context.Background())
+			if !errors.Is(err, readErr) {
+				t.Fatalf("scan error = %v, want %v", err, readErr)
+			}
 			if !tc.present {
 				if len(got) != 0 || (!tc.failed && len(c.prevProcesses) != 0) {
 					t.Fatal("missing processes retained output or baselines")
@@ -86,8 +89,8 @@ func TestProcessCPUInterruptedScanPreservesUnvisitedBaselines(t *testing.T) {
 	// PID 1 was sampled, PID 3 failed, and the deadline left 2 and 4 unvisited.
 	samples = []processSample{makeSample(1, 2, true), makeSample(3, 2, false)}
 	readErr = context.DeadlineExceeded
-	got := c.collectProcesses(context.Background())
-	if len(got) != 2 || got[0].PID != 1 || !got[0].CPUAvailable || got[0].CPU != 100 || got[1].PID != 3 || got[1].CPUAvailable {
+	got, err := c.collectProcesses(context.Background())
+	if !errors.Is(err, context.DeadlineExceeded) || len(got) != 2 || got[0].PID != 1 || !got[0].CPUAvailable || got[0].CPU != 100 || got[1].PID != 3 || got[1].CPUAvailable {
 		t.Fatalf("incomplete scan lost fresh samples or returned stale rows: %+v", got)
 	}
 	if len(c.prevProcesses) != 3 || c.prevProcesses[1].total != 2 || c.prevProcesses[2].total != 0 || c.prevProcesses[4].total != 0 {
@@ -100,15 +103,15 @@ func TestProcessCPUInterruptedScanPreservesUnvisitedBaselines(t *testing.T) {
 	// A complete scan recovers PID 2 across the longer interval and prunes PID 4.
 	samples = []processSample{makeSample(1, 4, true), makeSample(2, 4, true), makeSample(3, 4, true)}
 	readErr = nil
-	got = c.collectProcesses(context.Background())
-	if len(got) != 3 || !got[0].CPUAvailable || got[0].CPU != 100 || !got[1].CPUAvailable || got[1].CPU != 100 || got[2].CPUAvailable {
+	got, err = c.collectProcesses(context.Background())
+	if err != nil || len(got) != 3 || !got[0].CPUAvailable || got[0].CPU != 100 || !got[1].CPUAvailable || got[1].CPU != 100 || got[2].CPUAvailable {
 		t.Fatalf("complete scan did not recover preserved baselines: %+v", got)
 	}
 	if _, exists := c.prevProcesses[4]; exists {
 		t.Fatal("complete scan retained an exited process")
 	}
 	samples = []processSample{makeSample(4, 5, true)}
-	if got = c.collectProcesses(context.Background()); len(got) != 1 || got[0].CPUAvailable {
+	if got, err = c.collectProcesses(context.Background()); err != nil || len(got) != 1 || got[0].CPUAvailable {
 		t.Fatalf("reappearing process reused a pruned baseline: %+v", got)
 	}
 }
@@ -149,12 +152,12 @@ func TestProcessCPUKeepsBaselineForFilteredProcesses(t *testing.T) {
 	c := NewCollector()
 	sample := processSample{info: ProcessInfo{PID: 7, CPUAvailable: true}, created: 1, at: time.Now()}
 	c.processSamples = func(context.Context) ([]processSample, error) { return []processSample{sample}, nil }
-	if got := c.collectProcesses(context.Background()); len(got) != 0 {
+	if got, err := c.collectProcesses(context.Background()); err != nil || len(got) != 0 {
 		t.Fatal("idle process without significant memory should remain filtered")
 	}
 	sample.total, sample.at = 1, sample.at.Add(time.Second)
-	got := c.collectProcesses(context.Background())
-	if len(got) != 1 || !got[0].CPUAvailable || got[0].CPU != 100 {
+	got, err := c.collectProcesses(context.Background())
+	if err != nil || len(got) != 1 || !got[0].CPUAvailable || got[0].CPU != 100 {
 		t.Fatalf("filtered process lost its baseline before becoming busy: %+v", got)
 	}
 }
