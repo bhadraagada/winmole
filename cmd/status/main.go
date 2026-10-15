@@ -43,10 +43,11 @@ type MetricsSnapshot struct {
 	HealthMessage string
 
 	// Hardware
-	Hostname string
-	OS       string
-	Platform string
-	Uptime   time.Duration
+	HostAvailable bool
+	Hostname      string
+	OS            string
+	Platform      string
+	Uptime        time.Duration
 
 	// CPU
 	CPUAvailable bool
@@ -113,6 +114,7 @@ type Collector struct {
 	processMu      sync.Mutex
 	prevProcesses  map[int32]processSample
 	processSamples func(context.Context) ([]processSample, error)
+	hostInfo       func(context.Context) (*host.InfoStat, error)
 	cpuPercent     func(context.Context, time.Duration, bool) ([]float64, error)
 	virtualMemory  func(context.Context) (*mem.VirtualMemoryStat, error)
 	swapMemory     func(context.Context) (*mem.SwapMemoryStat, error)
@@ -124,6 +126,7 @@ func NewCollector() *Collector {
 	return &Collector{
 		prevNet:        make(map[string]net.IOCountersStat),
 		processSamples: readProcessSamples,
+		hostInfo:       host.InfoWithContext,
 		cpuPercent:     cpu.PercentWithContext,
 		virtualMemory:  mem.VirtualMemoryWithContext,
 		swapMemory:     mem.SwapMemoryWithContext,
@@ -158,8 +161,9 @@ func (c *Collector) collect(includeDetails bool) MetricsSnapshot {
 		if !includeDetails {
 			return
 		}
-		if info, err := host.InfoWithContext(ctx); err == nil {
+		if info, err := c.hostInfo(ctx); err == nil && info != nil {
 			mu.Lock()
+			snapshot.HostAvailable = true
 			snapshot.Hostname = info.Hostname
 			snapshot.OS = info.OS
 			snapshot.Platform = fmt.Sprintf("%s %s", info.Platform, info.PlatformVersion)
@@ -613,9 +617,13 @@ func (m model) content() string {
 	// System info
 	b.WriteString(headerStyle.Render("  📍 System"))
 	b.WriteString("\n")
-	b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("Host:"), valueStyle.Render(m.metrics.Hostname)))
-	b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("OS:"), valueStyle.Render(m.metrics.Platform)))
-	b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("Uptime:"), valueStyle.Render(formatDuration(m.metrics.Uptime))))
+	if m.metrics.HostAvailable {
+		b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("Host:"), valueStyle.Render(m.metrics.Hostname)))
+		b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("OS:"), valueStyle.Render(m.metrics.Platform)))
+		b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("Uptime:"), valueStyle.Render(formatDuration(m.metrics.Uptime))))
+	} else {
+		b.WriteString("  Host: Unavailable\n  OS: Unavailable\n  Uptime: Unavailable\n")
+	}
 	b.WriteString("\n")
 
 	// CPU

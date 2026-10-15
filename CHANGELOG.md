@@ -66,6 +66,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   retaining available process rows instead of silently showing an incomplete list.
   The warning clears after a successful scan and follows the displayed snapshot
   while paused.
+- The status dashboard shows unavailable host, OS, and uptime values when the
+  Windows host information query fails, instead of blank fields and a false
+  zero-minute uptime. Successful queries restore the displayed values.
 - Disk health now uses the fullest drive, so an earlier low-space warning cannot
   hide a critically full secondary drive. Existing thresholds and penalties remain.
 - First-time analyzer, status, and script builds now tolerate Go download progress

@@ -41,6 +41,7 @@ function Show-StatusHelp {
     Write-Host ""
     Write-Host "  ${green}DISPLAYS:${nc}"
     Write-Host ""
+    Write-Host "    ${cyan}System${nc}     Host, OS and uptime; unavailable when the host query fails"
     Write-Host "    ${cyan}CPU${nc}        Total usage, core count, optional per-logical-processor usage"
     Write-Host "    ${cyan}Memory${nc}     RAM usage and availability"
     Write-Host "    ${cyan}Disk${nc}       Drive usage and free space"
