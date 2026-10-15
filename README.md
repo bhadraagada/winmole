@@ -173,6 +173,10 @@ C:      █████████████░░░░░░  67.2%       D
 Free    156.3 GB / 476.9 GB              Up      ▮▯▯▯▯  0.8 MB/s
 ```
 
+If the Windows host information query fails, Host, OS, and Uptime show
+`Unavailable`. A later successful query restores these values. A measured
+uptime of zero minutes remains `0m`.
+
 Press `p` in the status dashboard to show or hide usage for each logical
 processor, labeled from `CPU 0`. This helps spot a busy processor when overall
 CPU usage is low. The readings update with each refresh and remain scrollable
