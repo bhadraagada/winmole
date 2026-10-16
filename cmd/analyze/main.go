@@ -192,6 +192,7 @@ type model struct {
 	deleteTargets  []string // Actual paths to delete (for multi-delete)
 	scanProgress   int64
 	scanTotal      int64
+	scanSelection  string // Restore a history highlight after its stale listing is rescanned.
 	width          int
 	height         int
 	err            error
@@ -254,6 +255,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.scanning = false
 		m.sortEntries()
 		m.selected = 0
+		for i, entry := range m.entries {
+			if entry.Path == m.scanSelection {
+				m.selected = i
+				break
+			}
+		}
+		m.scanSelection = ""
 		// Cache result
 		m.cache[m.path] = historyEntry{
 			Path:       m.path,
@@ -267,6 +275,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.scanTotal = msg.total
 		return m, nil
 	case scanErrorMsg:
+		m.scanSelection = ""
 		m.searching = false
 		m.searchQuery = ""
 		m.err = msg.err
@@ -285,7 +294,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			// Rescan after delete
 			m.scanning = true
-			delete(m.cache, m.path)
+			clear(m.cache)
 			return m, m.scanPath(m.path)
 		}
 		return m, nil
@@ -402,6 +411,13 @@ func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.sortEntries()
 			m.multiSelected = make(map[string]bool)
 			m.scanning = false
+			if _, fresh := m.cache[last.Path]; !fresh {
+				if m.selected >= 0 && m.selected < len(m.entries) {
+					m.scanSelection = m.entries[m.selected].Path
+				}
+				m.scanning = true
+				return m, m.scanPath(last.Path)
+			}
 		} else if parent := filepath.Dir(m.path); parent != m.path {
 			m.path = parent
 			m.selected = 0
@@ -442,8 +458,9 @@ func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.sortByName = !m.sortByName
 		m.sortEntries()
 	case "r":
-		// Refresh
-		delete(m.cache, m.path)
+		// History uses cache presence as freshness; ancestors and descendants can both change.
+		// ponytail: discard all snapshots; narrow invalidation if revisiting scans becomes costly.
+		clear(m.cache)
 		m.scanning = true
 		return m, m.scanPath(m.path)
 	case "o":
