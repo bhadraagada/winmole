@@ -165,7 +165,7 @@ function Invoke-StatusTool {
     $statusArgs = @()
     if ($Json) { $statusArgs += '-json' }
     & $binaryPath @statusArgs
-    if ($Json -and $LASTEXITCODE -ne 0) {
+    if ($LASTEXITCODE -ne 0) {
         throw "System monitor failed with exit code $LASTEXITCODE."
     }
 }
@@ -190,13 +190,6 @@ function Main {
 # Run
 try {
     Main
-}
-catch {
-    if ($Json) { throw }
-    Write-Host ""
-    Write-WinMoleError "An error occurred: $_"
-    Write-Host ""
-    exit 1
 }
 finally {
     Restore-WinMoleConsoleEncoding

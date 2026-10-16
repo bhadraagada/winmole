@@ -170,7 +170,7 @@ function Invoke-AnalyzeTool {
     }
     
     & $binaryPath @analyzeArgs
-    if ($Json -and $LASTEXITCODE -ne 0) {
+    if ($LASTEXITCODE -ne 0) {
         throw "Disk analyzer failed with exit code $LASTEXITCODE."
     }
 }
@@ -211,14 +211,6 @@ function Main {
 # Run
 try {
     Main
-}
-catch {
-    if ($Json) { throw }
-    Write-Host ""
-    $errMsg = $_.Exception.Message
-    Write-Host "  ERROR: An error occurred: $errMsg" -ForegroundColor Red
-    Write-Host ""
-    exit 1
 }
 finally {
     Restore-WinMoleConsoleEncoding

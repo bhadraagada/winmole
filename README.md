@@ -64,6 +64,12 @@ winmole purge                # Clean build artifacts
 winmole --help               # Show help
 ```
 
+If the analyzer or status tool fails to build or exits with an error, its
+PowerShell launcher reports the error on stderr and exits with a nonzero code.
+This applies to interactive and JSON runs through `winmole.ps1` or the scripts
+in `bin`. A tool failure also ends WinMole when started from its menu. A
+successful run exits with code zero.
+
 ## Features in Detail
 
 ### Deep System Cleanup
