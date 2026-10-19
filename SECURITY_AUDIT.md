@@ -125,7 +125,11 @@ The analyzer (`winmole analyze`) uses a different security model:
 
 - Runs with standard user permissions by default
 - All deletions require explicit user confirmation
-- Protected paths enforced by the analyzer before deletion
+- Go applies its own protected-path checks; it does not call the PowerShell helpers
+- `WINMOLE_DRY_RUN=1` blocks both single and batch deletion in the analyzer
+- Analyzer deletion does not yet honor whitelist files or protect ancestors of
+  protected paths. Use the analyzer with `WINMOLE_DRY_RUN=1` when these protections
+  are needed. Unifying deletion protection remains open safety work.
 
 **Code:** `cmd/analyze/main.go`
 
