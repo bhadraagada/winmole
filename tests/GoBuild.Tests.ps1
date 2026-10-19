@@ -32,7 +32,10 @@ function Initialize-WinMole { }
 function Restore-WinMoleConsoleEncoding { }
 function Clear-TempFiles { }
 function Write-WinMoleError { param($Message) Write-Host $Message }
+$script:Colors = @{ Cyan = ''; Gray = ''; Green = ''; NC = '' }
 '@
+        New-Item -ItemType Directory -Path (Join-Path $package '[sample] folder') | Out-Null
+        Set-Content -LiteralPath (Join-Path $package 'sample.txt') -Value 'fixture'
         $source = Join-Path $TestDrive 'native.go'
         Set-Content -LiteralPath $source -Value @'
 package main
@@ -88,6 +91,61 @@ func main() {
                 (Get-Content -LiteralPath $stdout -Raw | ConvertFrom-Json).ok | Should -BeTrue
                 Get-Content -LiteralPath $stderr -Raw | Should -BeNullOrEmpty
             }
+        }
+    }
+
+    Context 'Analyze paths via <Entry> with JSON=<Json>' -ForEach @(
+        @{ Entry = 'wrapper'; Json = $false },
+        @{ Entry = 'main'; Json = $false },
+        @{ Entry = 'wrapper'; Json = $true },
+        @{ Entry = 'main'; Json = $true }
+    ) {
+        BeforeEach {
+            $env:WINMOLE_TEST_NATIVE_FAILURE = '0'
+            $entryPoint = if ($Entry -eq 'main') { "$package\winmole.ps1" } else { "$package\bin\analyze.ps1" }
+            $commandArguments = @('-NoProfile', '-NonInteractive', '-File', "`"$entryPoint`"")
+            if ($Entry -eq 'main') { $commandArguments += 'analyze' }
+            if ($Json) { $commandArguments += '-Json' }
+        }
+
+        It 'rejects <Target> with stderr and a nonzero exit' -ForEach @(
+            @{ Target = 'missing' }, @{ Target = 'sample.txt' }
+        ) {
+            $targetPath = Join-Path $package $Target
+            $commandArguments += "`"$targetPath`""
+            $process = Start-Process -FilePath $shell -ArgumentList $commandArguments `
+                -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+
+            $process.ExitCode | Should -Be 1
+            Get-Content -LiteralPath $stdout -Raw | Should -BeNullOrEmpty
+            $errorText = Get-Content -LiteralPath $stderr -Raw
+            $errorText | Should -Match 'Not an existing directory:'
+            $errorText | Should -Match ([regex]::Escape($Target))
+        }
+
+        It 'accepts the <Kind> directory' -ForEach @(
+            @{ Kind = 'default'; Target = $null },
+            @{ Kind = 'relative'; Target = '.' },
+            @{ Kind = 'literal brackets and spaces'; Target = '[sample] folder' }
+        ) {
+            if ($Target) { $commandArguments += "`"$Target`"" }
+            $process = Start-Process -FilePath $shell -ArgumentList $commandArguments `
+                -WorkingDirectory $package -WindowStyle Hidden -Wait -PassThru `
+                -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+
+            $process.ExitCode | Should -Be 0
+            (Get-Content -LiteralPath $stdout -Raw | ConvertFrom-Json).ok | Should -BeTrue
+            Get-Content -LiteralPath $stderr -Raw | Should -BeNullOrEmpty
+        }
+
+        It 'shows help before validating the directory' {
+            $commandArguments += @("`"$(Join-Path $package 'missing')`"", '-Help')
+            $process = Start-Process -FilePath $shell -ArgumentList $commandArguments `
+                -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+
+            $process.ExitCode | Should -Be 0
+            Get-Content -LiteralPath $stdout -Raw | Should -Match 'Directory to analyze'
+            Get-Content -LiteralPath $stderr -Raw | Should -BeNullOrEmpty
         }
     }
 }

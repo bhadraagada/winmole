@@ -93,6 +93,12 @@ Space freed: 13.1 GB | Free space now: 156.3 GB
 
 ### Disk Space Analyzer
 
+The path must be an existing directory. If the path is missing or names a file,
+the PowerShell launcher reports an error on stderr and exits with a nonzero code
+before starting the analyzer. This applies to interactive and JSON runs. Omit
+the path to analyze the current directory. Paths are literal, so names with
+spaces or square brackets work when quoted.
+
 ```powershell
 .\winmole.ps1 analyze
 
