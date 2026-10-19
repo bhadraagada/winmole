@@ -3,15 +3,56 @@
 package main
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"github.com/rivo/uniseg"
 )
+
+func TestWalkDirSizePartialReasons(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "a.bin"), 5)
+	writeFile(t, filepath.Join(root, "b.bin"), 7)
+	expired, cancel := context.WithDeadline(context.Background(), time.Unix(0, 0))
+	defer cancel()
+	for _, tc := range []struct {
+		name        string
+		ctx         context.Context
+		path        string
+		count       int64
+		initial     uint32
+		wantSize    int64
+		wantReasons partialReasons
+	}{
+		{name: "complete", ctx: context.Background(), path: root, wantSize: 12},
+		{name: "timeout", ctx: expired, path: root, wantReasons: partialTimeout},
+		{name: "file limit before directory", ctx: context.Background(), path: root, count: maxFilesPerDir + 1, wantReasons: partialFileLimit},
+		{name: "file limit between files", ctx: context.Background(), path: root, count: maxFilesPerDir, wantSize: 5, wantReasons: partialFileLimit},
+		{name: "read error", ctx: context.Background(), path: filepath.Join(root, "missing"), wantReasons: partialReadError},
+		{name: "timeout preserves earlier read error", ctx: expired, path: root, initial: partialReadError, wantReasons: partialTimeout | partialReadError},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var size int64
+			var reasons atomic.Uint32
+			reasons.Store(tc.initial)
+			walkDirSize(tc.ctx, tc.path, &size, &tc.count, &reasons)
+			if size != tc.wantSize || partialReasons(reasons.Load()) != tc.wantReasons {
+				t.Fatalf("size/reasons = %d/%v, want %d/%v", size, partialReasons(reasons.Load()).codes(), tc.wantSize, tc.wantReasons.codes())
+			}
+		})
+	}
+	if size, reasons := calculateDirSize(filepath.Join(root, "missing")); size != 0 || !reflect.DeepEqual(reasons.codes(), []string{"read_error"}) {
+		t.Fatalf("directory sizing lost the read error: size=%d, reasons=%v", size, reasons.codes())
+	}
+}
 
 func TestTruncatePath(t *testing.T) {
 	for _, tt := range []struct {
@@ -86,7 +127,7 @@ func TestCalculateDirSizeCountsDeepTree(t *testing.T) {
 	}
 
 	got, partial := calculateDirSize(root)
-	if partial {
+	if partial != 0 {
 		t.Errorf("scan reported partial for a small tree")
 	}
 	if got != int64(want) {

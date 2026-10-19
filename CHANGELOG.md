@@ -47,6 +47,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   time, and UTC offset, so paused readings can be matched to logs. Missing
   timestamps show as unavailable; the time follows the displayed snapshot.
 
+- Analyzer JSON reports explain incomplete sizes with `partial_reasons` for
+  timeouts, file limits, and read errors, per entry and across the report.
+  The interactive analyzer shows the highlighted entry's causes above its
+  controls, including in a 40-column window.
+
 ### Fixed
 
 - The analyzer marks files it cannot stat as partial instead of reporting
