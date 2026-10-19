@@ -60,7 +60,7 @@ function Show-AnalyzeHelp {
     Write-Host "            Enter keeps highlight; Esc cancels; Ctrl+C quits"
     Write-Host "    ${cyan}Enter${nc}   Expand/collapse directory"
     Write-Host "    ${cyan}Backspace${nc} Go to parent directory"
-    Write-Host "    ${cyan}r${nc}       Refresh"
+    Write-Host "    ${cyan}r${nc}       Rescan and discard saved scans; revisited directories rescan"
     Write-Host "    ${cyan}q/Ctrl+C${nc} Quit (while searching, q is query text)"
     Write-Host ""
     Write-Host "  ${green}EXAMPLES:${nc}"
