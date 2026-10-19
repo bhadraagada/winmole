@@ -209,7 +209,20 @@ function Test-ProtectedPath {
     #>
     param([string]$Path)
     
-    $normalizedPath = [System.IO.Path]::GetFullPath($Path).TrimEnd('\')
+    $fullPath = [System.IO.Path]::GetFullPath($Path)
+    $normalizedPath = $fullPath.TrimEnd('\')
+    $normalizedRoot = [System.IO.Path]::GetPathRoot($fullPath).TrimEnd('\')
+
+    if ($normalizedPath.Equals($normalizedRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        return $true
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($env:USERPROFILE)) {
+        $normalizedUserProfile = [System.IO.Path]::GetFullPath($env:USERPROFILE).TrimEnd('\')
+        if ($normalizedPath.Equals($normalizedUserProfile, [StringComparison]::OrdinalIgnoreCase)) {
+            return $true
+        }
+    }
     
     foreach ($protected in $script:ProtectedPaths) {
         $normalizedProtected = [System.IO.Path]::GetFullPath($protected).TrimEnd('\')

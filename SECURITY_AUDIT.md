@@ -8,7 +8,7 @@ Report version 1.0.0 | January 2026
 
 ---
 
-**Audit Status:** PASSED | **Risk Level:** LOW
+**Audit Status:** HISTORICAL | **Current Review:** OVERDUE
 
 </div>
 
@@ -32,7 +32,7 @@ Report version 1.0.0 | January 2026
 | Attribute | Details |
 |-----------|---------|
 | Audit Date | January 2026 |
-| Audit Conclusion | **PASSED** |
+| Audit Conclusion | Historical snapshot; current review overdue |
 | WinMole Version | Pre-release snapshot from January 2026 |
 | Audited Branch | `master` |
 | Scope | PowerShell scripts, Go binaries, Configuration |
@@ -259,18 +259,14 @@ The compiled Go binaries include:
 
 | Library | Version | Purpose | License |
 |---------|---------|---------|---------|
-| `bubbletea` | v0.23+ | TUI framework | MIT |
-| `lipgloss` | v0.6+ | Terminal styling | MIT |
-| `gopsutil` | v3.22+ | System metrics | BSD-3 |
+| `bubbletea` | v1.3.10 | TUI framework | MIT |
+| `lipgloss` | v1.1.0 | Terminal styling | MIT |
+| `gopsutil` | v3.24.5 | System metrics | BSD-3 |
 
 **Supply Chain Security:**
 
-- All dependencies pinned to specific versions in `go.mod`
-- Regular security audits
-- No dependencies with known CVEs
+- All dependencies are pinned to specific versions in `go.mod`
 
 ---
 
-**Certification:** This security audit certifies that WinMole implements industry-standard defensive programming practices and adheres to Windows security guidelines. The architecture prioritizes system stability and data integrity over aggressive optimization.
-
-*For security concerns or vulnerability reports, please open an issue on GitHub.*
+This report records the January 2026 review. It is not a current certification.
