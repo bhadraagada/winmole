@@ -74,6 +74,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Analyzer and status PowerShell launchers now return failure when an
   interactive native tool fails. Build and launch errors reach the main
   launcher, write diagnostics to stderr, and return a nonzero exit code.
+- The analyzer's PowerShell launcher now rejects missing paths and files in
+  interactive mode as it does for JSON reports. It reports the error on stderr
+  and exits with failure before building or starting the analyzer.
 - First-time analyzer, status, and script builds now tolerate Go download progress
   on stderr in Windows PowerShell 5.1. Build failures still show diagnostics, and
   analyzer and status commands exit with failure when compilation fails.

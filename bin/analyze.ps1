@@ -45,7 +45,7 @@ function Show-AnalyzeHelp {
     Write-Host ""
     Write-Host "  ${green}ARGUMENTS:${nc}"
     Write-Host ""
-    Write-Host "    ${cyan}path${nc}    Directory to analyze (default: current directory)"
+    Write-Host "    ${cyan}path${nc}    Existing directory to analyze (default: current directory)"
     Write-Host "    ${cyan}-Json${nc}   Write a read-only JSON report without opening the TUI"
     Write-Host ""
     Write-Host "  ${green}CONTROLS:${nc}"
@@ -196,12 +196,8 @@ function Main {
     }
     
     # Validate path
-    if ($Json -and -not (Test-Path -LiteralPath $targetPath -PathType Container)) {
+    if (-not (Test-Path -LiteralPath $targetPath -PathType Container)) {
         throw "Not an existing directory: $targetPath"
-    }
-    if (-not (Test-Path -LiteralPath $targetPath)) {
-        Write-Host "  ERROR: Path does not exist: $targetPath" -ForegroundColor Red
-        return
     }
     
     # Run the analyzer
