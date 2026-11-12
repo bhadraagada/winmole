@@ -49,6 +49,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Analyzer Space selection now uses the native key event. Refresh and new scans
+  clear marks, and batch confirmations include only currently visible marked entries.
+
 - The analyzer marks files it cannot stat as partial instead of reporting
   an apparently complete zero-byte measurement.
 - Analyzer input during a scan can no longer replace a parent listing with a
