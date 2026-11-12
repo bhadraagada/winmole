@@ -245,6 +245,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		return m, nil
 	case scanCompleteMsg:
+		// Marks belong to one listing snapshot, not to paths that may be replaced.
+		m.multiSelected = make(map[string]bool)
 		m.searching = false
 		m.searchQuery = ""
 		m.err = nil
@@ -409,7 +411,7 @@ func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.scanning = true
 			return m, m.scanPath(parent)
 		}
-	case "space":
+	case " ":
 		if len(m.entries) > 0 {
 			entry := m.entries[m.selected]
 			if m.multiSelected[entry.Path] {
@@ -425,14 +427,17 @@ func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.deleteTarget = entry.Path
 		}
 	case "D":
-		// Delete all selected
-		if len(m.multiSelected) > 0 {
-			m.deleteConfirm = true
-			// Collect paths for deletion
-			var paths []string
-			for path := range m.multiSelected {
-				paths = append(paths, path)
+		// Only currently displayed, explicitly marked entries may be confirmed.
+		// Iterate the listing so the target order is stable and hidden stale marks
+		// cannot turn into a deletion request.
+		var paths []string
+		for _, entry := range m.entries {
+			if m.multiSelected[entry.Path] {
+				paths = append(paths, entry.Path)
 			}
+		}
+		if len(paths) > 0 {
+			m.deleteConfirm = true
 			m.deleteTargets = paths
 			m.deleteTarget = fmt.Sprintf("%d items", len(paths))
 		}
@@ -442,7 +447,8 @@ func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.sortByName = !m.sortByName
 		m.sortEntries()
 	case "r":
-		// Refresh
+		// Refresh invalidates marks before any replacement listing arrives.
+		m.multiSelected = make(map[string]bool)
 		delete(m.cache, m.path)
 		m.scanning = true
 		return m, m.scanPath(m.path)
