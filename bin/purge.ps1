@@ -115,17 +115,21 @@ function Get-SearchPaths {
 
     $paths = @()
 
-    # Load custom paths if available
-    if (Test-Path $script:ConfigFile) {
-        $customPaths = Get-Content $script:ConfigFile -ErrorAction SilentlyContinue |
-                       Where-Object { $_ -and -not $_.StartsWith('#') } |
-                       ForEach-Object { $_.Trim() }
-
-        foreach ($path in $customPaths) {
-            if (Test-Path $path) {
-                $paths += $path
+    # An unreadable configuration must not broaden the scan to default paths.
+    try {
+        if (Test-Path -LiteralPath $script:ConfigFile -ErrorAction Stop) {
+            $customPaths = Get-Content -LiteralPath $script:ConfigFile -ErrorAction Stop |
+                           Where-Object { $_ -and -not $_.StartsWith('#') } |
+                           ForEach-Object { $_.Trim() }
+            foreach ($path in $customPaths) {
+                if (Test-Path -LiteralPath $path -ErrorAction Stop) {
+                    $paths += $path
+                }
             }
         }
+    }
+    catch {
+        throw "Cannot load purge search paths from '$($script:ConfigFile)'. Purge stopped without scanning. $($_.Exception.Message)"
     }
 
     # Add default paths if no custom paths or custom paths don't exist
