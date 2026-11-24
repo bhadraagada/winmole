@@ -23,8 +23,9 @@ Commands:
   optimize         Run system maintenance
   purge            Clean developer artifacts
 
-Run without a command for the interactive menu. Commands and the menu use
-Windows PowerShell and respect the host's script execution policy.
+Run without a command for the interactive menu. The analyze and status JSON
+reports run natively. Other commands use Windows PowerShell and respect its
+execution policy.
 `
 
 // Metadata is available even when PowerShell cannot execute the bundled scripts.
