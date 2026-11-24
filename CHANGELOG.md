@@ -49,6 +49,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Analyzer single and batch deletions are refused while `WINMOLE_DRY_RUN=1`,
+  even if preview mode is enabled after confirmation.
+
 - Analyzer Space selection now uses the native key event. Refresh and new scans
   clear marks, and batch confirmations include only currently visible marked entries.
 
