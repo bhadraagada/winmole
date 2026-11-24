@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -193,6 +194,7 @@ type model struct {
 	scanProgress   int64
 	scanTotal      int64
 	scanSelection  string // Restore a history highlight after its stale listing is rescanned.
+	deleteScanErr  error  // Carry an incomplete deletion error through its rescan.
 	width          int
 	height         int
 	err            error
@@ -216,8 +218,9 @@ type scanErrorMsg struct {
 }
 
 type deleteCompleteMsg struct {
-	path string
-	err  error
+	path      string
+	err       error
+	attempted bool // The filesystem may have changed, even when RemoveAll returned an error.
 }
 
 func newModel(startPath string) model {
@@ -248,7 +251,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case scanCompleteMsg:
 		m.searching = false
 		m.searchQuery = ""
-		m.err = nil
+		m.err = m.deleteScanErr
+		m.deleteScanErr = nil
 		m.entries = msg.entries
 		m.largeFiles = msg.largeFiles
 		m.totalSize = msg.totalSize
@@ -278,7 +282,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.scanSelection = ""
 		m.searching = false
 		m.searchQuery = ""
-		m.err = msg.err
+		m.err = errors.Join(m.deleteScanErr, msg.err)
+		m.deleteScanErr = nil
 		m.scanning = false
 		m.entries = nil
 		m.largeFiles = nil
@@ -289,11 +294,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case deleteCompleteMsg:
 		m.deleteConfirm = false
 		m.deleteTarget = ""
-		if msg.err != nil {
-			m.err = msg.err
-		} else {
-			// Rescan after delete
+		m.deleteTargets = nil
+		m.err = msg.err
+		if msg.attempted || msg.err == nil {
+			m.deleteScanErr = msg.err
 			m.scanning = true
+			m.multiSelected = make(map[string]bool)
 			clear(m.cache)
 			return m, m.scanPath(m.path)
 		}
@@ -794,7 +800,7 @@ func (m model) deletePath(path string) tea.Cmd {
 		}
 
 		err := os.RemoveAll(path)
-		return deleteCompleteMsg{path: path, err: err}
+		return deleteCompleteMsg{path: path, err: err, attempted: true}
 	}
 }
 
@@ -802,23 +808,26 @@ func (m model) deletePath(path string) tea.Cmd {
 func (m model) deletePaths(paths []string) tea.Cmd {
 	return func() tea.Msg {
 		var errors []string
+		attempted := false
 		for _, path := range paths {
 			// Safety check: never delete protected paths
 			if isProtectedPath(path) {
 				errors = append(errors, fmt.Sprintf("protected: %s", path))
 				continue
 			}
+			attempted = true
 			if err := os.RemoveAll(path); err != nil {
 				errors = append(errors, fmt.Sprintf("%s: %v", path, err))
 			}
 		}
 		if len(errors) > 0 {
 			return deleteCompleteMsg{
-				path: fmt.Sprintf("%d items", len(paths)),
-				err:  fmt.Errorf("failed to delete some items: %s", strings.Join(errors, "; ")),
+				path:      fmt.Sprintf("%d items", len(paths)),
+				err:       fmt.Errorf("failed to delete some items: %s", strings.Join(errors, "; ")),
+				attempted: attempted,
 			}
 		}
-		return deleteCompleteMsg{path: fmt.Sprintf("%d items", len(paths)), err: nil}
+		return deleteCompleteMsg{path: fmt.Sprintf("%d items", len(paths)), attempted: attempted}
 	}
 }
 
