@@ -57,3 +57,32 @@ func TestIncompleteDeletionInvalidatesAllSnapshots(t *testing.T) {
 		})
 	}
 }
+
+func TestPendingDeletionBlocksNavigationUntilCompletion(t *testing.T) {
+	root := t.TempDir()
+	m := newModel(root)
+	m.scanning = false
+	m.entries = []dirEntry{{Name: "project", Path: filepath.Join(root, "project"), IsDir: true}}
+	next, _ := m.Update(navigationKey("d"))
+	next, deletion := next.(model).Update(navigationKey("y"))
+	if deletion == nil || !next.(model).deletePending {
+		t.Fatal("confirmation did not stage a deletion")
+	}
+	// The queued command is deliberately not run. A navigation keystroke
+	// must not change paths or create an overlapping scan.
+	for _, key := range []string{"enter", "r", "d", "y"} {
+		updated, command := next.(model).Update(navigationKey(key))
+		if command != nil || updated.(model).path != root || updated.(model).deleteConfirm {
+			t.Fatalf("%q acted while a deletion was queued", key)
+		}
+		next = updated
+	}
+	next, command := next.(model).Update(deleteCompleteMsg{err: errors.New("refused")})
+	if command != nil || next.(model).deletePending {
+		t.Fatal("refused deletion left navigation blocked")
+	}
+	_, command = next.(model).Update(navigationKey("enter"))
+	if command == nil {
+		t.Fatal("navigation did not resume after refusal")
+	}
+}

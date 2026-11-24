@@ -189,6 +189,7 @@ type model struct {
 	showLargeFiles bool
 	multiSelected  map[string]bool
 	deleteConfirm  bool
+	deletePending  bool
 	deleteTarget   string   // Display name for confirmation
 	deleteTargets  []string // Actual paths to delete (for multi-delete)
 	scanProgress   int64
@@ -294,6 +295,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.multiSelected = make(map[string]bool)
 		return m, nil
 	case deleteCompleteMsg:
+		m.deletePending = false
 		m.deleteConfirm = false
 		m.deleteTarget = ""
 		m.deleteTargets = nil
@@ -311,6 +313,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Do not start a second scan or deletion while removal is in flight.
+	if m.deletePending {
+		return m, nil
+	}
 	// Keep the displayed path and its entries together until the scan finishes.
 	if m.scanning {
 		if msg.String() == "q" || msg.String() == "ctrl+c" {
@@ -327,6 +333,7 @@ func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.deleteConfirm = false
+			m.deletePending = true
 			if len(m.deleteTargets) > 0 {
 				// Multi-delete
 				targets := m.deleteTargets
@@ -640,6 +647,9 @@ func (m model) confirmationView() (string, bool) {
 
 func (m model) View() string {
 	width, height := m.viewSize()
+	if m.deletePending {
+		return ansi.Truncate("Processing deletion request...", width, "")
+	}
 	if m.deleteConfirm {
 		view, _ := m.confirmationView()
 		return view
