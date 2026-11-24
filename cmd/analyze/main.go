@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -188,10 +189,13 @@ type model struct {
 	showLargeFiles bool
 	multiSelected  map[string]bool
 	deleteConfirm  bool
+	deletePending  bool
 	deleteTarget   string   // Display name for confirmation
 	deleteTargets  []string // Actual paths to delete (for multi-delete)
 	scanProgress   int64
 	scanTotal      int64
+	scanSelection  string // Restore a history highlight after its stale listing is rescanned.
+	deleteScanErr  error  // Carry an incomplete deletion error through its rescan.
 	width          int
 	height         int
 	err            error
@@ -215,8 +219,9 @@ type scanErrorMsg struct {
 }
 
 type deleteCompleteMsg struct {
-	path string
-	err  error
+	path      string
+	err       error
+	attempted bool // The filesystem may have changed, even when RemoveAll returned an error.
 }
 
 func newModel(startPath string) model {
@@ -245,15 +250,25 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		return m, nil
 	case scanCompleteMsg:
+		// Marks belong to one listing snapshot, not to paths that may be replaced.
+		m.multiSelected = make(map[string]bool)
 		m.searching = false
 		m.searchQuery = ""
-		m.err = nil
+		m.err = m.deleteScanErr
+		m.deleteScanErr = nil
 		m.entries = msg.entries
 		m.largeFiles = msg.largeFiles
 		m.totalSize = msg.totalSize
 		m.scanning = false
 		m.sortEntries()
 		m.selected = 0
+		for i, entry := range m.entries {
+			if entry.Path == m.scanSelection {
+				m.selected = i
+				break
+			}
+		}
+		m.scanSelection = ""
 		// Cache result
 		m.cache[m.path] = historyEntry{
 			Path:       m.path,
@@ -267,9 +282,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.scanTotal = msg.total
 		return m, nil
 	case scanErrorMsg:
+		m.scanSelection = ""
 		m.searching = false
 		m.searchQuery = ""
-		m.err = msg.err
+		m.err = errors.Join(m.deleteScanErr, msg.err)
+		m.deleteScanErr = nil
 		m.scanning = false
 		m.entries = nil
 		m.largeFiles = nil
@@ -278,14 +295,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.multiSelected = make(map[string]bool)
 		return m, nil
 	case deleteCompleteMsg:
+		m.deletePending = false
 		m.deleteConfirm = false
 		m.deleteTarget = ""
-		if msg.err != nil {
-			m.err = msg.err
-		} else {
-			// Rescan after delete
+		m.deleteTargets = nil
+		m.err = msg.err
+		if msg.attempted || msg.err == nil {
+			m.deleteScanErr = msg.err
 			m.scanning = true
-			delete(m.cache, m.path)
+			m.multiSelected = make(map[string]bool)
+			clear(m.cache)
 			return m, m.scanPath(m.path)
 		}
 		return m, nil
@@ -294,6 +313,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Do not start a second scan or deletion while removal is in flight.
+	if m.deletePending {
+		return m, nil
+	}
 	// Keep the displayed path and its entries together until the scan finishes.
 	if m.scanning {
 		if msg.String() == "q" || msg.String() == "ctrl+c" {
@@ -310,6 +333,7 @@ func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.deleteConfirm = false
+			m.deletePending = true
 			if len(m.deleteTargets) > 0 {
 				// Multi-delete
 				targets := m.deleteTargets
@@ -402,6 +426,13 @@ func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.sortEntries()
 			m.multiSelected = make(map[string]bool)
 			m.scanning = false
+			if _, fresh := m.cache[last.Path]; !fresh {
+				if m.selected >= 0 && m.selected < len(m.entries) {
+					m.scanSelection = m.entries[m.selected].Path
+				}
+				m.scanning = true
+				return m, m.scanPath(last.Path)
+			}
 		} else if parent := filepath.Dir(m.path); parent != m.path {
 			m.path = parent
 			m.selected = 0
@@ -409,7 +440,7 @@ func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.scanning = true
 			return m, m.scanPath(parent)
 		}
-	case "space":
+	case " ":
 		if len(m.entries) > 0 {
 			entry := m.entries[m.selected]
 			if m.multiSelected[entry.Path] {
@@ -425,14 +456,17 @@ func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.deleteTarget = entry.Path
 		}
 	case "D":
-		// Delete all selected
-		if len(m.multiSelected) > 0 {
-			m.deleteConfirm = true
-			// Collect paths for deletion
-			var paths []string
-			for path := range m.multiSelected {
-				paths = append(paths, path)
+		// Only currently displayed, explicitly marked entries may be confirmed.
+		// Iterate the listing so the target order is stable and hidden stale marks
+		// cannot turn into a deletion request.
+		var paths []string
+		for _, entry := range m.entries {
+			if m.multiSelected[entry.Path] {
+				paths = append(paths, entry.Path)
 			}
+		}
+		if len(paths) > 0 {
+			m.deleteConfirm = true
 			m.deleteTargets = paths
 			m.deleteTarget = fmt.Sprintf("%d items", len(paths))
 		}
@@ -442,8 +476,9 @@ func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.sortByName = !m.sortByName
 		m.sortEntries()
 	case "r":
-		// Refresh
-		delete(m.cache, m.path)
+		// Refresh invalidates selection and all saved listings, not just this path.
+		m.multiSelected = make(map[string]bool)
+		clear(m.cache)
 		m.scanning = true
 		return m, m.scanPath(m.path)
 	case "o":
@@ -612,6 +647,9 @@ func (m model) confirmationView() (string, bool) {
 
 func (m model) View() string {
 	width, height := m.viewSize()
+	if m.deletePending {
+		return ansi.Truncate("Processing deletion request...", width, "")
+	}
 	if m.deleteConfirm {
 		view, _ := m.confirmationView()
 		return view
@@ -765,9 +803,20 @@ func (m model) scanPath(path string) tea.Cmd {
 	}
 }
 
+// checkDeletionMode runs when the command executes, including after confirmation.
+func checkDeletionMode() error {
+	if os.Getenv("WINMOLE_DRY_RUN") == "1" {
+		return fmt.Errorf("deletion disabled while WINMOLE_DRY_RUN=1; no files were deleted")
+	}
+	return nil
+}
+
 // deletePath deletes a file or directory with protection checks
 func (m model) deletePath(path string) tea.Cmd {
 	return func() tea.Msg {
+		if err := checkDeletionMode(); err != nil {
+			return deleteCompleteMsg{path: path, err: err}
+		}
 		// Safety check: never delete protected paths
 		if isProtectedPath(path) {
 			return deleteCompleteMsg{
@@ -777,31 +826,37 @@ func (m model) deletePath(path string) tea.Cmd {
 		}
 
 		err := os.RemoveAll(path)
-		return deleteCompleteMsg{path: path, err: err}
+		return deleteCompleteMsg{path: path, err: err, attempted: true}
 	}
 }
 
 // deletePaths deletes multiple files or directories with protection checks
 func (m model) deletePaths(paths []string) tea.Cmd {
 	return func() tea.Msg {
+		if err := checkDeletionMode(); err != nil {
+			return deleteCompleteMsg{path: fmt.Sprintf("%d items", len(paths)), err: err}
+		}
 		var errors []string
+		attempted := false
 		for _, path := range paths {
 			// Safety check: never delete protected paths
 			if isProtectedPath(path) {
 				errors = append(errors, fmt.Sprintf("protected: %s", path))
 				continue
 			}
+			attempted = true
 			if err := os.RemoveAll(path); err != nil {
 				errors = append(errors, fmt.Sprintf("%s: %v", path, err))
 			}
 		}
 		if len(errors) > 0 {
 			return deleteCompleteMsg{
-				path: fmt.Sprintf("%d items", len(paths)),
-				err:  fmt.Errorf("failed to delete some items: %s", strings.Join(errors, "; ")),
+				path:      fmt.Sprintf("%d items", len(paths)),
+				err:       fmt.Errorf("failed to delete some items: %s", strings.Join(errors, "; ")),
+				attempted: attempted,
 			}
 		}
-		return deleteCompleteMsg{path: fmt.Sprintf("%d items", len(paths)), err: nil}
+		return deleteCompleteMsg{path: fmt.Sprintf("%d items", len(paths)), attempted: attempted}
 	}
 }
 

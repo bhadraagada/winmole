@@ -140,7 +140,12 @@ func TestAnalyzerSortPersistsThroughNavigationAndRefresh(t *testing.T) {
 	}
 	updated, command = m.Update(navigationKey("backspace"))
 	m = updated.(model)
-	if command != nil || !m.sortByName || m.selected != 0 || m.entries[m.selected].Path != child {
+	if command == nil || !m.scanning {
+		t.Fatal("back reused history from before refresh")
+	}
+	updated, _ = m.Update(command())
+	m = updated.(model)
+	if !m.sortByName || m.selected != 0 || m.entries[m.selected].Path != child {
 		t.Fatal("restored size-sorted history lost current name order or selected path")
 	}
 }

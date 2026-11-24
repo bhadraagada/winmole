@@ -238,23 +238,124 @@ function Remove-StartMenuShortcut {
 # Install
 # ============================================================================
 
+function Get-WinMoleInstallPathItem {
+    param([string]$Path)
+
+    try {
+        $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+        if ($null -ne $item) {
+            return $item
+        }
+    }
+    catch [System.Management.Automation.ItemNotFoundException] {
+        # Confirm absence below; an unreadable path is not a missing path.
+    }
+
+    # Windows PowerShell can return no object for a missing bracketed name.
+    # GetAttributes uses the literal native path and distinguishes access errors.
+    try {
+        $null = [System.IO.File]::GetAttributes($Path)
+    }
+    catch [System.IO.FileNotFoundException], [System.IO.DirectoryNotFoundException] {
+        return $null
+    }
+    throw "Cannot inspect existing install write path: '$Path'"
+}
+
+function Assert-WinMoleOrdinaryInstallPath {
+    param(
+        [string]$Path,
+        [switch]$Directory,
+        [switch]$InspectTree
+    )
+
+    $item = Get-WinMoleInstallPathItem -Path $Path
+    if ($null -eq $item) {
+        return
+    }
+
+    if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -or
+        ($Directory -and $item -isnot [System.IO.DirectoryInfo]) -or
+        (-not $Directory -and $item -isnot [System.IO.FileInfo])) {
+        throw "Not an ordinary install write path: '$Path'"
+    }
+    if ($InspectTree -and $Directory) {
+        foreach ($child in @(Get-ChildItem -LiteralPath $Path -Force -ErrorAction Stop)) {
+            # Check each entry before descending so no linked subtree is walked.
+            Assert-WinMoleOrdinaryInstallPath -Path $child.FullName -Directory:$child.PSIsContainer -InspectTree
+        }
+    }
+}
+
+function Test-WinMoleInstallDestination {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path,
+        [switch]$AllowOverwrite
+    )
+
+    try {
+        $ancestors = [System.Collections.Generic.List[string]]::new()
+        for ($parent = [IO.Path]::GetDirectoryName($Path); $parent; $parent = [IO.Path]::GetDirectoryName($parent)) {
+            $ancestors.Add($parent)
+        }
+        $ancestors.Reverse()
+        foreach ($ancestor in $ancestors) {
+            Assert-WinMoleOrdinaryInstallPath -Path $ancestor -Directory
+        }
+        $destination = Get-WinMoleInstallPathItem -Path $Path
+        if ($null -eq $destination) {
+            return $false
+        }
+        if ($destination -isnot [System.IO.DirectoryInfo] -or
+            ($destination.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+            throw 'The target must be an ordinary filesystem directory.'
+        }
+        if (-not $AllowOverwrite) {
+            throw 'The directory already exists. Use -Force only to update an existing installation or use a new directory.'
+        }
+
+        # Include hidden entries and fail closed if enumeration is incomplete.
+        if (@(Get-ChildItem -LiteralPath $Path -Force -ErrorAction Stop).Count -gt 0) {
+            foreach ($relativePath in @('winmole.ps1', 'winmole.cmd', 'bin\clean.ps1', 'lib\core\base.ps1')) {
+                if (-not (Test-Path -LiteralPath (Join-Path $Path $relativePath) -PathType Leaf -ErrorAction Stop)) {
+                    throw 'The directory is not a recognizable WinMole installation.'
+                }
+            }
+        }
+        foreach ($directory in @('bin', 'lib', 'cmd')) {
+            Assert-WinMoleOrdinaryInstallPath -Path (Join-Path $Path $directory) -Directory -InspectTree
+        }
+        foreach ($directory in @('scripts', 'tests')) {
+            Assert-WinMoleOrdinaryInstallPath -Path (Join-Path $Path $directory) -Directory
+        }
+        foreach ($file in @('winmole.ps1', 'winmole.cmd', 'go.mod')) {
+            Assert-WinMoleOrdinaryInstallPath -Path (Join-Path $Path $file)
+        }
+        return $true
+    }
+    catch {
+        throw "Refusing to install into '$Path': $($_.Exception.Message)"
+    }
+}
+
 function Install-WinMole {
     Write-Info "Installing WinMole v$script:VERSION..."
     Write-Host ""
-    
-    # Check if already installed
-    if ((Test-Path $InstallDir) -and -not $Force) {
-        Write-Error "WinMole is already installed at: $InstallDir"
-        Write-Host ""
-        Write-Host "  Use -Force to overwrite or -Uninstall to remove first"
-        Write-Host ""
-        return $false
+
+    $provider = $null
+    $drive = $null
+    $InstallDir = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath(
+        $InstallDir, [ref]$provider, [ref]$drive)
+    if ($provider.Name -ne 'FileSystem') {
+        throw 'The install destination must be on the filesystem.'
     }
-    
+    $destinationExists = Test-WinMoleInstallDestination -Path $InstallDir -AllowOverwrite:$Force
+
     # Create install directory
-    if (-not (Test-Path $InstallDir)) {
+    if (-not $destinationExists) {
         try {
-            New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
+            New-Item -ItemType Directory -Path $InstallDir -ErrorAction Stop | Out-Null
             Write-Success "Created directory: $InstallDir"
         }
         catch {
@@ -301,7 +402,7 @@ function Install-WinMole {
     $extraDirs = @("scripts", "tests")
     foreach ($dir in $extraDirs) {
         $dirPath = Join-Path $InstallDir $dir
-        if (-not (Test-Path $dirPath)) {
+        if (-not (Test-Path -LiteralPath $dirPath)) {
             New-Item -ItemType Directory -Path $dirPath -Force | Out-Null
         }
     }
@@ -312,7 +413,7 @@ function Install-WinMole {
 powershell.exe -ExecutionPolicy Bypass -NoLogo -File "%~dp0winmole.ps1" %*
 "@
     $batchPath = Join-Path $InstallDir "winmole.cmd"
-    Set-Content -Path $batchPath -Value $batchContent -Encoding ASCII
+    Set-Content -LiteralPath $batchPath -Value $batchContent -Encoding ASCII -ErrorAction Stop
     Write-Success "Created launcher: winmole.cmd"
     
     # Add to PATH if requested

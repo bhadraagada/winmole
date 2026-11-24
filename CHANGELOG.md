@@ -49,6 +49,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The installer refuses force-overwriting unrelated or unreadable directories.
+
+- Analyzer single and batch deletions are refused while `WINMOLE_DRY_RUN=1`,
+  even if preview mode is enabled after confirmation.
+
+- Analyzer Space selection now uses the native key event. Refresh and new scans
+  clear marks, and batch confirmations include only currently visible marked entries.
 - Purge stops when its search-path configuration cannot be read or checked,
   rather than falling back to default directories.
 
@@ -99,6 +106,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Failed process-memory readings now show as unavailable instead of zero.
   Memory sorting places measured readings first, including measured zero;
   a successful refresh restores missing readings.
+- Analyzer refresh now discards saved scans, so returning to a parent or
+  reopening a child cannot restore old file lists and totals. The existing
+  refresh after a successful deletion also discards saved scans.
 
 ## [0.1.1] - 2026-07-31
 
