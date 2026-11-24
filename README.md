@@ -64,6 +64,12 @@ winmole purge                # Clean build artifacts
 winmole --help               # Show help
 ```
 
+If the analyzer or status tool fails to build or exits with an error, its
+PowerShell launcher reports the error on stderr and exits with a nonzero code.
+This applies to interactive and JSON runs through `winmole.ps1` or the scripts
+in `bin`. A tool failure also ends WinMole when started from its menu. A
+successful run exits with code zero.
+
 ## Features in Detail
 
 ### Deep System Cleanup
@@ -86,6 +92,12 @@ Space freed: 13.1 GB | Free space now: 156.3 GB
 ```
 
 ### Disk Space Analyzer
+
+The path must be an existing directory. If the path is missing or names a file,
+the PowerShell launcher reports an error on stderr and exits with a nonzero code
+before starting the analyzer. This applies to interactive and JSON runs. Omit
+the path to analyze the current directory. Paths are literal, so names with
+spaces or square brackets work when quoted.
 
 ```powershell
 .\winmole.ps1 analyze
@@ -179,6 +191,10 @@ C:      █████████████░░░░░░  67.2%       D
 Free    156.3 GB / 476.9 GB              Up      ▮▯▯▯▯  0.8 MB/s
 ```
 
+If the Windows host information query fails, Host, OS, and Uptime show
+`Unavailable`. A later successful query restores these values. A measured
+uptime of zero minutes remains `0m`.
+
 Press `p` in the status dashboard to show or hide usage for each logical
 processor, labeled from `CPU 0`. This helps spot a busy processor when overall
 CPU usage is low. The readings update with each refresh and remain scrollable
@@ -186,6 +202,15 @@ on machines with many processors. Missing per-core readings show as unavailable.
 
 Press `m` in the status dashboard to switch the top five processes between CPU
 and memory usage. CPU is the default; the process heading shows the active sort.
+Press `a` to show all collected active processes or return to the top five.
+Scroll to inspect processes below the first five. This choice persists through
+sorting and refreshes; the same activity threshold described below still applies.
+
+Press `Space` to pause the displayed snapshot while inspecting processes or
+other readings. Scrolling, sorting, and display toggles still work. Background
+sampling continues, including when you press `r`, so CPU sample intervals stay
+intact. Press `Space` again to show the latest received snapshot and resume live
+updates. Pause becomes available after the first snapshot loads.
 
 Process CPU usage measures the interval between successful samples, so recent
 spikes in long-running apps appear in the ranking. Listed processes with a first
@@ -199,11 +224,20 @@ places measured readings first, and a successful refresh restores missing
 readings. A process appears only when a measured CPU or memory value exceeds
 0.1%, so a process with neither reading available is omitted.
 
+If the process scan fails or is interrupted, the dashboard warns that some
+processes may be missing. Available rows remain visible. A successful scan clears
+the warning. While paused, the warning stays with the displayed snapshot.
+
 Use `Up`/`Down` or `k`/`j` to scroll, `PgUp`/`PgDn` to move a page, and
 `Home`/`End` to jump to the first or last row. The dashboard wraps to the terminal
 width and keeps its controls visible, so lower sections and long health warnings
 remain reachable in a short window. Very small windows show compact controls;
 enlarge a one-column or one-row window to read metrics.
+
+The `Sample started` line shows when collection of the displayed snapshot began,
+with its full date, time, and UTC offset. The time stays fixed while paused and
+changes with the displayed snapshot on resume or refresh. It is not the completion
+time of every individual measurement. A missing timestamp shows `Unavailable`.
 
 Each drive shows its used and total capacity, usage percentage, and free space
 beside the usage bar. Free space updates with each metrics refresh.

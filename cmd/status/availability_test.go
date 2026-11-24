@@ -10,11 +10,15 @@ import (
 	"time"
 
 	"github.com/shirou/gopsutil/v3/disk"
+	"github.com/shirou/gopsutil/v3/host"
 	"github.com/shirou/gopsutil/v3/mem"
 )
 
 func healthyCollector() *Collector {
 	c := NewCollector()
+	c.hostInfo = func(context.Context) (*host.InfoStat, error) {
+		return &host.InfoStat{Hostname: "desktop", OS: "windows", Platform: "Windows", PlatformVersion: "11"}, nil
+	}
 	c.processSamples = func(context.Context) ([]processSample, error) { return nil, nil }
 	c.cpuPercent = func(context.Context, time.Duration, bool) ([]float64, error) { return []float64{0}, nil }
 	c.virtualMemory = func(context.Context) (*mem.VirtualMemoryStat, error) {

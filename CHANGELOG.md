@@ -36,8 +36,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Press `p` in the status dashboard to show usage for every logical processor,
   helping identify a busy processor hidden by low overall CPU usage. Readings
   reuse the existing samples and remain scrollable in short windows.
+- Press `a` in the status dashboard to show all collected active processes,
+  including those below the default top five. The expanded list supports
+  scrolling and keeps its display choice through sorting and refreshes.
+- Press `Space` in the status dashboard to hold the displayed snapshot while
+  inspecting processes and other readings. Sampling continues in the background;
+  resuming shows the latest received snapshot with the current sort and display choices.
+
+- The status dashboard shows the displayed snapshot's collection start date,
+  time, and UTC offset, so paused readings can be matched to logs. Missing
+  timestamps show as unavailable; the time follows the displayed snapshot.
 
 ### Fixed
+
+- Analyzer single and batch deletions are refused while `WINMOLE_DRY_RUN=1`,
+  even if preview mode is enabled after confirmation.
+
+- Analyzer Space selection now uses the native key event. Refresh and new scans
+  clear marks, and batch confirmations include only currently visible marked entries.
+- Purge stops when its search-path configuration cannot be read or checked,
+  rather than falling back to default directories.
 
 - The analyzer marks files it cannot stat as partial instead of reporting
   an apparently complete zero-byte measurement.
@@ -52,8 +70,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   network names.
 - Long paths in the analyzer's large-file list now preserve Unicode characters
   and the filename suffix while fitting the available display width.
+- The status dashboard warns when a process scan fails or is interrupted,
+  retaining available process rows instead of silently showing an incomplete list.
+  The warning clears after a successful scan and follows the displayed snapshot
+  while paused.
+- The status dashboard shows unavailable host, OS, and uptime values when the
+  Windows host information query fails, instead of blank fields and a false
+  zero-minute uptime. Successful queries restore the displayed values.
 - Disk health now uses the fullest drive, so an earlier low-space warning cannot
   hide a critically full secondary drive. Existing thresholds and penalties remain.
+- Analyzer and status PowerShell launchers now return failure when an
+  interactive native tool fails. Build and launch errors reach the main
+  launcher, write diagnostics to stderr, and return a nonzero exit code.
+- The analyzer's PowerShell launcher now rejects missing paths and files in
+  interactive mode as it does for JSON reports. It reports the error on stderr
+  and exits with failure before building or starting the analyzer.
 - First-time analyzer, status, and script builds now tolerate Go download progress
   on stderr in Windows PowerShell 5.1. Build failures still show diagnostics, and
   analyzer and status commands exit with failure when compilation fails.

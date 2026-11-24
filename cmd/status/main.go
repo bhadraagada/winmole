@@ -43,10 +43,11 @@ type MetricsSnapshot struct {
 	HealthMessage string
 
 	// Hardware
-	Hostname string
-	OS       string
-	Platform string
-	Uptime   time.Duration
+	HostAvailable bool
+	Hostname      string
+	OS            string
+	Platform      string
+	Uptime        time.Duration
 
 	// CPU
 	CPUAvailable bool
@@ -73,7 +74,8 @@ type MetricsSnapshot struct {
 	Networks []NetworkInfo
 
 	// Processes
-	Processes []ProcessInfo
+	Processes             []ProcessInfo
+	ProcessScanIncomplete bool
 }
 
 type DiskInfo struct {
@@ -112,6 +114,7 @@ type Collector struct {
 	processMu      sync.Mutex
 	prevProcesses  map[int32]processSample
 	processSamples func(context.Context) ([]processSample, error)
+	hostInfo       func(context.Context) (*host.InfoStat, error)
 	cpuPercent     func(context.Context, time.Duration, bool) ([]float64, error)
 	virtualMemory  func(context.Context) (*mem.VirtualMemoryStat, error)
 	swapMemory     func(context.Context) (*mem.SwapMemoryStat, error)
@@ -123,6 +126,7 @@ func NewCollector() *Collector {
 	return &Collector{
 		prevNet:        make(map[string]net.IOCountersStat),
 		processSamples: readProcessSamples,
+		hostInfo:       host.InfoWithContext,
 		cpuPercent:     cpu.PercentWithContext,
 		virtualMemory:  mem.VirtualMemoryWithContext,
 		swapMemory:     mem.SwapMemoryWithContext,
@@ -157,8 +161,9 @@ func (c *Collector) collect(includeDetails bool) MetricsSnapshot {
 		if !includeDetails {
 			return
 		}
-		if info, err := host.InfoWithContext(ctx); err == nil {
+		if info, err := c.hostInfo(ctx); err == nil && info != nil {
 			mu.Lock()
+			snapshot.HostAvailable = true
 			snapshot.Hostname = info.Hostname
 			snapshot.OS = info.OS
 			snapshot.Platform = fmt.Sprintf("%s %s", info.Platform, info.PlatformVersion)
@@ -285,10 +290,11 @@ func (c *Collector) collect(includeDetails bool) MetricsSnapshot {
 		if !includeDetails {
 			return
 		}
-		procInfos := c.collectProcesses(ctx)
+		procInfos, err := c.collectProcesses(ctx)
 
 		mu.Lock()
 		snapshot.Processes = procInfos
+		snapshot.ProcessScanIncomplete = err != nil
 		mu.Unlock()
 	}()
 
@@ -398,9 +404,12 @@ func calculateHealthScore(s MetricsSnapshot) (int, string) {
 type model struct {
 	collector    *Collector
 	metrics      MetricsSnapshot
+	paused       bool
+	pending      *MetricsSnapshot
 	animFrame    int
 	catHidden    bool
 	showPerCore  bool
+	showAllProcs bool
 	sortByMemory bool
 	ready        bool
 	collecting   bool
@@ -446,10 +455,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
+		case " ":
+			if m.ready {
+				m.paused = !m.paused
+				if !m.paused && m.pending != nil {
+					m.metrics = *m.pending
+					m.pending = nil
+					sortProcesses(m.metrics.Processes, m.sortByMemory)
+				}
+			}
 		case "c":
 			m.catHidden = !m.catHidden
 		case "p":
 			m.showPerCore = !m.showPerCore
+		case "a":
+			m.showAllProcs = !m.showAllProcs
 		case "up", "k":
 			m.scroll--
 		case "down", "j":
@@ -487,9 +507,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tickCmd()
 	case metricsMsg:
-		m.metrics = MetricsSnapshot(msg)
-		sortProcesses(m.metrics.Processes, m.sortByMemory)
-		m.ready = true
+		if m.paused {
+			// Keep sampling CPU/network intervals while the user inspects a snapshot.
+			snapshot := MetricsSnapshot(msg)
+			m.pending = &snapshot
+		} else {
+			m.metrics = MetricsSnapshot(msg)
+			sortProcesses(m.metrics.Processes, m.sortByMemory)
+			m.ready = true
+		}
 		m.collecting = false
 	}
 	lines, _, height := m.layout()
@@ -510,9 +536,13 @@ func (m model) View() string {
 }
 
 func (m model) layout() (lines, footer []string, height int) {
+	pauseControl := "pause"
+	if m.paused {
+		pauseControl = "resume (paused)"
+	}
 	footer = []string{
-		"[↑/↓ j/k] scroll [PgUp/PgDn] page [Home/End]",
-		"[q] quit [r] refresh [m] sort [p] cores [c] mascot",
+		"[↑↓] scroll [PgUp/PgDn] [Home/End] [Space] " + pauseControl,
+		"[q] quit [r] refresh [m] sort [a] all [p] cores [c] mascot",
 	}
 	content := strings.Trim(m.content(), "\n")
 	if !m.sized {
@@ -526,7 +556,11 @@ func (m model) layout() (lines, footer []string, height int) {
 		return nil, []string{"q"}, 0
 	}
 	if m.width < lipgloss.Width(strings.Join(footer, "\n")) || m.height < 4 {
-		footer = []string{ansi.Truncate("q quit | ↑/↓ scroll", m.width, "")}
+		controls := "q quit ↑↓ scroll | Space pause"
+		if m.paused {
+			controls = "paused | q quit ↑↓ scroll | Space resume"
+		}
+		footer = []string{ansi.Truncate(controls, m.width, "")}
 	}
 	for i := range footer {
 		footer[i] = dimStyle.Render(footer[i])
@@ -551,7 +585,17 @@ func (m model) content() string {
 	b.WriteString(titleStyle.Render("  🐹 WinMole System Status"))
 	b.WriteString("  ")
 	b.WriteString(winmoleFrame)
+	b.WriteString("\n")
+	sampleStarted := "Unavailable"
+	if !m.metrics.CollectedAt.IsZero() {
+		sampleStarted = m.metrics.CollectedAt.Format("2006-01-02 15:04:05 -0700")
+	}
+	b.WriteString(dimStyle.Render("  Sample started: " + sampleStarted))
 	b.WriteString("\n\n")
+	if m.paused {
+		b.WriteString(warnStyle.Render("  Display paused. Space resumes."))
+		b.WriteString("\n\n")
+	}
 
 	// Health score
 	healthColor := okStyle
@@ -573,9 +617,13 @@ func (m model) content() string {
 	// System info
 	b.WriteString(headerStyle.Render("  📍 System"))
 	b.WriteString("\n")
-	b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("Host:"), valueStyle.Render(m.metrics.Hostname)))
-	b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("OS:"), valueStyle.Render(m.metrics.Platform)))
-	b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("Uptime:"), valueStyle.Render(formatDuration(m.metrics.Uptime))))
+	if m.metrics.HostAvailable {
+		b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("Host:"), valueStyle.Render(m.metrics.Hostname)))
+		b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("OS:"), valueStyle.Render(m.metrics.Platform)))
+		b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("Uptime:"), valueStyle.Render(formatDuration(m.metrics.Uptime))))
+	} else {
+		b.WriteString("  Host: Unavailable\n  OS: Unavailable\n  Uptime: Unavailable\n")
+	}
 	b.WriteString("\n")
 
 	// CPU
@@ -670,15 +718,23 @@ func (m model) content() string {
 	b.WriteString("\n")
 
 	// Top Processes
-	if len(m.metrics.Processes) > 0 {
+	if len(m.metrics.Processes) > 0 || m.metrics.ProcessScanIncomplete {
 		order := "CPU"
 		if m.sortByMemory {
 			order = "Memory"
 		}
-		b.WriteString(headerStyle.Render("  📊 Top Processes by " + order))
+		group := "Top Processes by "
+		if m.showAllProcs {
+			group = "Active Processes by "
+		}
+		b.WriteString(headerStyle.Render("  📊 " + group + order))
 		b.WriteString("\n")
+		if m.metrics.ProcessScanIncomplete {
+			b.WriteString(warnStyle.Render("  Process scan incomplete. Some processes may be missing."))
+			b.WriteString("\n")
+		}
 		for i, p := range m.metrics.Processes {
-			if i >= 5 {
+			if i >= 5 && !m.showAllProcs {
 				break
 			}
 			cpuText := "Unavailable"

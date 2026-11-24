@@ -249,6 +249,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		return m, nil
 	case scanCompleteMsg:
+		// Marks belong to one listing snapshot, not to paths that may be replaced.
+		m.multiSelected = make(map[string]bool)
 		m.searching = false
 		m.searchQuery = ""
 		m.err = m.deleteScanErr
@@ -431,7 +433,7 @@ func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.scanning = true
 			return m, m.scanPath(parent)
 		}
-	case "space":
+	case " ":
 		if len(m.entries) > 0 {
 			entry := m.entries[m.selected]
 			if m.multiSelected[entry.Path] {
@@ -447,14 +449,17 @@ func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.deleteTarget = entry.Path
 		}
 	case "D":
-		// Delete all selected
-		if len(m.multiSelected) > 0 {
-			m.deleteConfirm = true
-			// Collect paths for deletion
-			var paths []string
-			for path := range m.multiSelected {
-				paths = append(paths, path)
+		// Only currently displayed, explicitly marked entries may be confirmed.
+		// Iterate the listing so the target order is stable and hidden stale marks
+		// cannot turn into a deletion request.
+		var paths []string
+		for _, entry := range m.entries {
+			if m.multiSelected[entry.Path] {
+				paths = append(paths, entry.Path)
 			}
+		}
+		if len(paths) > 0 {
+			m.deleteConfirm = true
 			m.deleteTargets = paths
 			m.deleteTarget = fmt.Sprintf("%d items", len(paths))
 		}
@@ -464,8 +469,8 @@ func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.sortByName = !m.sortByName
 		m.sortEntries()
 	case "r":
-		// History uses cache presence as freshness; ancestors and descendants can both change.
-		// ponytail: discard all snapshots; narrow invalidation if revisiting scans becomes costly.
+		// Refresh invalidates selection and all saved listings, not just this path.
+		m.multiSelected = make(map[string]bool)
 		clear(m.cache)
 		m.scanning = true
 		return m, m.scanPath(m.path)
@@ -788,9 +793,20 @@ func (m model) scanPath(path string) tea.Cmd {
 	}
 }
 
+// checkDeletionMode runs when the command executes, including after confirmation.
+func checkDeletionMode() error {
+	if os.Getenv("WINMOLE_DRY_RUN") == "1" {
+		return fmt.Errorf("deletion disabled while WINMOLE_DRY_RUN=1; no files were deleted")
+	}
+	return nil
+}
+
 // deletePath deletes a file or directory with protection checks
 func (m model) deletePath(path string) tea.Cmd {
 	return func() tea.Msg {
+		if err := checkDeletionMode(); err != nil {
+			return deleteCompleteMsg{path: path, err: err}
+		}
 		// Safety check: never delete protected paths
 		if isProtectedPath(path) {
 			return deleteCompleteMsg{
@@ -807,6 +823,9 @@ func (m model) deletePath(path string) tea.Cmd {
 // deletePaths deletes multiple files or directories with protection checks
 func (m model) deletePaths(paths []string) tea.Cmd {
 	return func() tea.Msg {
+		if err := checkDeletionMode(); err != nil {
+			return deleteCompleteMsg{path: fmt.Sprintf("%d items", len(paths)), err: err}
+		}
 		var errors []string
 		attempted := false
 		for _, path := range paths {

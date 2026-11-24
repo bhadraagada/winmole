@@ -41,6 +41,7 @@ function Show-StatusHelp {
     Write-Host ""
     Write-Host "  ${green}DISPLAYS:${nc}"
     Write-Host ""
+    Write-Host "    ${cyan}System${nc}     Host, OS and uptime; unavailable when the host query fails"
     Write-Host "    ${cyan}CPU${nc}        Total usage, core count, optional per-logical-processor usage"
     Write-Host "    ${cyan}Memory${nc}     RAM usage and availability"
     Write-Host "    ${cyan}Disk${nc}       Drive usage and free space"
@@ -49,16 +50,21 @@ function Show-StatusHelp {
     Write-Host "               CPU measures usage between samples; first/failed samples are unavailable"
     Write-Host "               100% CPU = one logical processor; multi-core use can exceed 100%"
     Write-Host "               Failed process memory readings are unavailable; memory sort puts readings first"
+    Write-Host "               Failed/interrupted process scans warn that some processes may be missing"
     Write-Host ""
     Write-Host "  ${green}CONTROLS:${nc}"
     Write-Host ""
     Write-Host "    ${cyan}Up/Down,j/k${nc} Scroll the dashboard"
     Write-Host "    ${cyan}PgUp/PgDn${nc}  Scroll one page"
     Write-Host "    ${cyan}Home/End${nc}   Jump to the top/bottom"
+    Write-Host "    ${cyan}Space${nc}      Pause/resume the displayed snapshot after loading"
+    Write-Host "               Sampling continues while paused; resume shows the latest received snapshot"
+    Write-Host "               Sample started shows the displayed snapshot's collection start, date/time and UTC offset"
     Write-Host "    ${cyan}m${nc}          Toggle process sorting: CPU/memory"
+    Write-Host "    ${cyan}a${nc}          Toggle top five/all collected active processes"
     Write-Host "    ${cyan}p${nc}          Show/hide logical processor usage (CPU 0 onward)"
     Write-Host "    ${cyan}c${nc}          Toggle WinMole animation"
-    Write-Host "    ${cyan}r${nc}          Refresh now"
+    Write-Host "    ${cyan}r${nc}          Sample now (display stays frozen while paused)"
     Write-Host "    ${cyan}q/Ctrl+C${nc}   Quit"
     Write-Host ""
     Write-Host "  ${green}EXAMPLES:${nc}"
@@ -159,7 +165,7 @@ function Invoke-StatusTool {
     $statusArgs = @()
     if ($Json) { $statusArgs += '-json' }
     & $binaryPath @statusArgs
-    if ($Json -and $LASTEXITCODE -ne 0) {
+    if ($LASTEXITCODE -ne 0) {
         throw "System monitor failed with exit code $LASTEXITCODE."
     }
 }
@@ -184,13 +190,6 @@ function Main {
 # Run
 try {
     Main
-}
-catch {
-    if ($Json) { throw }
-    Write-Host ""
-    Write-WinMoleError "An error occurred: $_"
-    Write-Host ""
-    exit 1
 }
 finally {
     Restore-WinMoleConsoleEncoding
