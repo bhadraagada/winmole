@@ -7,8 +7,12 @@
 Describe "Installer" {
     It "creates a fresh destination without force" {
         $root = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
-        $installDir = Join-Path $TestDrive 'new-parent/WinMole'
+        $installDir = Join-Path $TestDrive 'new-parent/WinMole [local]'
+        $decoy = Join-Path $TestDrive 'new-parent/WinMole l/winmole.cmd'
+        $null = New-Item -ItemType Directory -Path (Split-Path -Parent $decoy) -Force
+        [IO.File]::WriteAllText($decoy, 'untouched')
         & (Join-Path $root 'install.ps1') -InstallDir $installDir *> $null
+        [IO.File]::ReadAllText($decoy) | Should -Be 'untouched'
         Test-Path -LiteralPath (Join-Path $installDir 'winmole.cmd') -PathType Leaf | Should -BeTrue
         Test-Path -LiteralPath (Join-Path $installDir 'bin/clean.ps1') -PathType Leaf | Should -BeTrue
     }
@@ -53,7 +57,7 @@ Describe 'Installer destination guard' {
         foreach ($function in $ast.FindAll({
             param($node)
             $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
-            $node.Name -in @('Install-WinMole', 'Test-WinMoleInstallDestination')
+            $node.Name -in @('Install-WinMole', 'Test-WinMoleInstallDestination', 'Assert-WinMoleOrdinaryInstallPath')
         }, $false)) {
             . ([scriptblock]::Create($function.Extent.Text))
         }
@@ -96,6 +100,38 @@ Describe 'Installer destination guard' {
         { Install-WinMole } | Should -Throw '*Fixture metadata denied*'
         Should -Invoke Copy-Item -Times 0 -Exactly
         Should -Invoke Set-Content -Times 0 -Exactly
+    }
+
+    It 'refuses a destination under a linked ancestor' {
+        $outside = Join-Path $TestDrive 'linked-ancestor-target'
+        $null = New-Item -ItemType Directory -Path $outside
+        $link = Join-Path $TestDrive 'linked-ancestor'
+        $linkType = if ($env:OS -eq 'Windows_NT') { 'Junction' } else { 'SymbolicLink' }
+        $null = New-Item -ItemType $linkType -Path $link -Value $outside
+        $InstallDir = Join-Path $link 'missing-child'
+
+        { Install-WinMole } | Should -Throw '*Not an ordinary install write path*'
+        Test-Path -LiteralPath (Join-Path $outside 'missing-child') | Should -BeFalse
+        Should -Invoke Copy-Item -Times 0 -Exactly
+    }
+
+    It 'refuses nested linked write paths under an existing install' {
+        foreach ($marker in @('winmole.ps1', 'winmole.cmd', 'bin/clean.ps1', 'lib/core/base.ps1')) {
+            $path = Join-Path $InstallDir $marker
+            $null = New-Item -ItemType Directory -Path (Split-Path -Parent $path) -Force
+            [IO.File]::WriteAllText($path, 'fixture')
+        }
+        $outside = Join-Path $TestDrive 'nested-junction-target'
+        $null = New-Item -ItemType Directory -Path $outside
+        $sentinel = Join-Path $outside 'sentinel.txt'
+        [IO.File]::WriteAllText($sentinel, 'untouched')
+        $linkType = if ($env:OS -eq 'Windows_NT') { 'Junction' } else { 'SymbolicLink' }
+        $null = New-Item -ItemType $linkType -Path (Join-Path $InstallDir 'bin/linked') -Value $outside
+
+        { Install-WinMole } | Should -Throw '*Not an ordinary install write path*'
+        Should -Invoke Copy-Item -Times 0 -Exactly
+        Should -Invoke Set-Content -Times 0 -Exactly
+        [IO.File]::ReadAllText($sentinel) | Should -Be 'untouched'
     }
 
     It 'allows a verified empty directory only with force' {
