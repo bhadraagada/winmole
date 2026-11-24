@@ -12,6 +12,10 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+func powerShellArgs(script string, args []string) []string {
+	return append([]string{"-NoLogo", "-NoProfile", "-File", script}, args...)
+}
+
 func launch(args []string) error {
 	executable, err := os.Executable()
 	if err != nil {
@@ -32,14 +36,21 @@ func launch(args []string) error {
 		return fmt.Errorf("the WinMole script is missing or invalid: %s", script)
 	}
 	// Leave the working directory and execution policy untouched.
-	childArgs := append([]string{"-NoLogo", "-NoProfile", "-File", script}, args...)
-	cmd := exec.Command(powershell, childArgs...)
+	cmd := exec.Command(powershell, powerShellArgs(script, args)...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	return cmd.Run()
 }
 
 func main() {
-	if err := launch(os.Args[1:]); err != nil {
+	args := os.Args[1:]
+	if handled, err := writeMetadata(os.Stdout, args); handled {
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "WinMole:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if err := launch(args); err != nil {
 		var exit *exec.ExitError
 		if errors.As(err, &exit) {
 			os.Exit(exit.ExitCode())
