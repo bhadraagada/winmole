@@ -93,6 +93,8 @@ Describe 'Installer destination guard' {
     }
 
     It 'refuses rather than creating a target when its metadata cannot be read' {
+        # Return ordinary directory metadata for unrelated ancestor probes.
+        Mock Get-Item { [IO.DirectoryInfo]::new($LiteralPath) }
         Mock Get-Item {
             throw [System.UnauthorizedAccessException]::new('Fixture metadata denied')
         } -ParameterFilter { $LiteralPath -eq $InstallDir }
@@ -141,6 +143,7 @@ Describe 'Installer destination guard' {
 
     It 'distinguishes missing paths from existing paths when the provider returns no object' {
         $missing = Join-Path $TestDrive 'missing [folder]'
+        Mock Get-Item { [IO.DirectoryInfo]::new($LiteralPath) }
         Mock Get-Item { return $null } -ParameterFilter {
             $LiteralPath -eq $missing -or $LiteralPath -eq $InstallDir
         }
