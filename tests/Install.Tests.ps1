@@ -57,7 +57,7 @@ Describe 'Installer destination guard' {
         foreach ($function in $ast.FindAll({
             param($node)
             $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
-            $node.Name -in @('Install-WinMole', 'Test-WinMoleInstallDestination', 'Assert-WinMoleOrdinaryInstallPath')
+            $node.Name -in @('Install-WinMole', 'Test-WinMoleInstallDestination', 'Assert-WinMoleOrdinaryInstallPath', 'Get-WinMoleInstallPathItem')
         }, $false)) {
             . ([scriptblock]::Create($function.Extent.Text))
         }
@@ -137,6 +137,17 @@ Describe 'Installer destination guard' {
     It 'allows a verified empty directory only with force' {
         Test-WinMoleInstallDestination -Path $InstallDir -AllowOverwrite | Should -BeTrue
         { Test-WinMoleInstallDestination -Path $InstallDir } | Should -Throw '*already exists*'
+    }
+
+    It 'distinguishes missing paths from existing paths when the provider returns no object' {
+        $missing = Join-Path $TestDrive 'missing [folder]'
+        Mock Get-Item { return $null } -ParameterFilter {
+            $LiteralPath -eq $missing -or $LiteralPath -eq $InstallDir
+        }
+
+        Test-WinMoleInstallDestination -Path $missing | Should -BeFalse
+        { Install-WinMole } | Should -Throw '*Cannot inspect existing install write path*'
+        Should -Invoke Copy-Item -Times 0 -Exactly
     }
 
     It 'allows a new literal target without force' {

@@ -238,6 +238,30 @@ function Remove-StartMenuShortcut {
 # Install
 # ============================================================================
 
+function Get-WinMoleInstallPathItem {
+    param([string]$Path)
+
+    try {
+        $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+        if ($null -ne $item) {
+            return $item
+        }
+    }
+    catch [System.Management.Automation.ItemNotFoundException] {
+        # Confirm absence below; an unreadable path is not a missing path.
+    }
+
+    # Windows PowerShell can return no object for a missing bracketed name.
+    # GetAttributes uses the literal native path and distinguishes access errors.
+    try {
+        $null = [System.IO.File]::GetAttributes($Path)
+    }
+    catch [System.IO.FileNotFoundException], [System.IO.DirectoryNotFoundException] {
+        return $null
+    }
+    throw "Cannot inspect existing install write path: '$Path'"
+}
+
 function Assert-WinMoleOrdinaryInstallPath {
     param(
         [string]$Path,
@@ -245,10 +269,8 @@ function Assert-WinMoleOrdinaryInstallPath {
         [switch]$InspectTree
     )
 
-    try {
-        $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
-    }
-    catch [System.Management.Automation.ItemNotFoundException] {
+    $item = Get-WinMoleInstallPathItem -Path $Path
+    if ($null -eq $item) {
         return
     }
 
@@ -281,10 +303,8 @@ function Test-WinMoleInstallDestination {
         foreach ($ancestor in $ancestors) {
             Assert-WinMoleOrdinaryInstallPath -Path $ancestor -Directory
         }
-        try {
-            $destination = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
-        }
-        catch [System.Management.Automation.ItemNotFoundException] {
+        $destination = Get-WinMoleInstallPathItem -Path $Path
+        if ($null -eq $destination) {
             return $false
         }
         if ($destination -isnot [System.IO.DirectoryInfo] -or
