@@ -6,7 +6,7 @@ on:
       - 'v*'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -22,23 +22,6 @@ jobs:
         with:
           go-version: '1.24'
 
-      - name: Build Binaries
-        shell: pwsh
-        run: |
-          # Build for Windows AMD64
-          $env:GOOS = "windows"
-          $env:GOARCH = "amd64"
-          go build -ldflags="-s -w" -o bin/analyze-windows-amd64.exe ./cmd/analyze
-          go build -ldflags="-s -w" -o bin/status-windows-amd64.exe ./cmd/status
-          
-          # Build for Windows ARM64
-          $env:GOARCH = "arm64"
-          go build -ldflags="-s -w" -o bin/analyze-windows-arm64.exe ./cmd/analyze
-          go build -ldflags="-s -w" -o bin/status-windows-arm64.exe ./cmd/status
-          
-          Write-Host "Built binaries:"
-          Get-ChildItem bin/*.exe | ForEach-Object { Write-Host "  $($_.Name) - $([math]::Round($_.Length/1MB, 2)) MB" }
-
       - name: Run Tests
         shell: pwsh
         run: |
@@ -52,52 +35,57 @@ jobs:
           
           Invoke-Pester -Configuration $config
 
-      - name: Create Release Archive
+      - name: Build release archives
         shell: pwsh
         run: |
-          # Create release directory. bin/ must exist before the wildcard copies
-          # below; Copy-Item does not create intermediate directories and fails
-          # with "The directory name is invalid" when given several source files.
-          New-Item -ItemType Directory -Path release -Force
-          New-Item -ItemType Directory -Path release/bin -Force
-
-          # Copy PowerShell scripts
-          Copy-Item -Path winmole.ps1 -Destination release/
-          Copy-Item -Path install.ps1 -Destination release/
-          Copy-Item -Path bin/*.ps1 -Destination release/bin/ -Force
-          Copy-Item -Path lib -Destination release/ -Recurse
-          Copy-Item -Path README.md -Destination release/
-          Copy-Item -Path LICENSE -Destination release/
-          Copy-Item -Path CONTRIBUTING.md -Destination release/
-          
-          # Copy AMD64 binaries
-          Copy-Item -Path bin/analyze-windows-amd64.exe -Destination release/bin/analyze.exe
-          Copy-Item -Path bin/status-windows-amd64.exe -Destination release/bin/status.exe
-          
-          # Create ZIP archive
-          Compress-Archive -Path release/* -DestinationPath winmole-windows-amd64.zip
-          
-          # Create ARM64 version
-          Copy-Item -Path bin/analyze-windows-arm64.exe -Destination release/bin/analyze.exe -Force
-          Copy-Item -Path bin/status-windows-arm64.exe -Destination release/bin/status.exe -Force
-          Compress-Archive -Path release/* -DestinationPath winmole-windows-arm64.zip
-          
-          Write-Host "Created release archives:"
-          Get-ChildItem *.zip | ForEach-Object { Write-Host "  $($_.Name) - $([math]::Round($_.Length/1MB, 2)) MB" }
+          ./scripts/build-portable-package.ps1 -Architecture amd64 -OutputDirectory artifacts
+          ./scripts/build-portable-package.ps1 -Architecture arm64 -OutputDirectory artifacts
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
           name: release-binaries
           path: |
-            winmole-windows-amd64.zip
-            winmole-windows-arm64.zip
-            bin/*-windows-*.exe
+            artifacts/winmole-windows-amd64.zip
+            artifacts/winmole-windows-arm64.zip
+            artifacts/bin/*-windows-*.exe
+          if-no-files-found: error
           retention-days: 5
+
+  smoke:
+    name: Smoke release archive (${{ matrix.architecture }})
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - architecture: amd64
+            runner: windows-2025
+          - architecture: arm64
+            runner: windows-11-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    env:
+      PACKAGE_ARCH: ${{ matrix.architecture }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-binaries
+          path: artifacts
+
+      - name: Smoke-test the exact release archive without changing PowerShell policy
+        shell: pwsh
+        run: ./scripts/test-portable-package.ps1 -Archive "artifacts/winmole-windows-$env:PACKAGE_ARCH.zip"
 
   release:
     name: Publish Release
-    needs: build
+    needs: smoke
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
 
     steps:

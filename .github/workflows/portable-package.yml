@@ -1,0 +1,61 @@
+name: Portable package
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/portable-package.yml'
+      - '.github/workflows/release.yml'
+      - 'cmd/**'
+      - 'lib/**'
+      - 'bin/**'
+      - 'scripts/build-portable-package.ps1'
+      - 'scripts/test-portable-package.ps1'
+      - 'go.mod'
+      - 'go.sum'
+      - 'winmole.ps1'
+      - 'install.ps1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Smoke (${{ matrix.architecture }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - architecture: amd64
+            runner: windows-2025
+          - architecture: arm64
+            runner: windows-11-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    env:
+      PACKAGE_ARCH: ${{ matrix.architecture }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.24'
+
+      - name: Build the release archive
+        shell: pwsh
+        run: ./scripts/build-portable-package.ps1 -Architecture $env:PACKAGE_ARCH -OutputDirectory artifacts
+
+      - name: Smoke-test the extracted archive under the runner's policy
+        shell: pwsh
+        run: ./scripts/test-portable-package.ps1 -Archive "artifacts/winmole-windows-$env:PACKAGE_ARCH.zip"
+
+      - name: Upload candidate archive for manual WinGet testing
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: portable-winmole-${{ matrix.architecture }}
+          path: artifacts/winmole-windows-${{ matrix.architecture }}.zip
+          if-no-files-found: error
+          retention-days: 5
