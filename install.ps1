@@ -238,23 +238,53 @@ function Remove-StartMenuShortcut {
 # Install
 # ============================================================================
 
+function Test-WinMoleInstallDestination {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path,
+        [switch]$AllowOverwrite
+    )
+
+    try {
+        try {
+            $destination = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+        }
+        catch [System.Management.Automation.ItemNotFoundException] {
+            return $false
+        }
+        if ($destination -isnot [System.IO.DirectoryInfo] -or
+            ($destination.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+            throw 'The target must be an ordinary filesystem directory.'
+        }
+        if (-not $AllowOverwrite) {
+            throw 'The directory already exists. Use -Force only to update an existing installation or use a new directory.'
+        }
+
+        # Include hidden entries and fail closed if enumeration is incomplete.
+        if (@(Get-ChildItem -LiteralPath $Path -Force -ErrorAction Stop).Count -gt 0) {
+            foreach ($relativePath in @('winmole.ps1', 'winmole.cmd', 'bin\clean.ps1', 'lib\core\base.ps1')) {
+                if (-not (Test-Path -LiteralPath (Join-Path $Path $relativePath) -PathType Leaf -ErrorAction Stop)) {
+                    throw 'The directory is not a recognizable WinMole installation.'
+                }
+            }
+        }
+        return $true
+    }
+    catch {
+        throw "Refusing to install into '$Path': $($_.Exception.Message)"
+    }
+}
+
 function Install-WinMole {
     Write-Info "Installing WinMole v$script:VERSION..."
     Write-Host ""
-    
-    # Check if already installed
-    if ((Test-Path $InstallDir) -and -not $Force) {
-        Write-Error "WinMole is already installed at: $InstallDir"
-        Write-Host ""
-        Write-Host "  Use -Force to overwrite or -Uninstall to remove first"
-        Write-Host ""
-        return $false
-    }
-    
+
+    $destinationExists = Test-WinMoleInstallDestination -Path $InstallDir -AllowOverwrite:$Force
+
     # Create install directory
-    if (-not (Test-Path $InstallDir)) {
+    if (-not $destinationExists) {
         try {
-            New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
+            New-Item -ItemType Directory -Path $InstallDir -ErrorAction Stop | Out-Null
             Write-Success "Created directory: $InstallDir"
         }
         catch {

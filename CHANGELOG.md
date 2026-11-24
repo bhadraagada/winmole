@@ -49,6 +49,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The installer refuses force-overwriting unrelated or unreadable directories.
+
 - Analyzer single and batch deletions are refused while `WINMOLE_DRY_RUN=1`,
   even if preview mode is enabled after confirmation.
 
