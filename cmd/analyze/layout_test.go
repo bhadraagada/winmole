@@ -31,6 +31,109 @@ func assertViewFits(t *testing.T, m model) string {
 	return view
 }
 
+func TestAnalyzerPartialReasonStatus(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		reasons  partialReasons
+		partial  bool
+		selected int
+		scanning bool
+		want     string
+	}{
+		{name: "timeout", reasons: partialTimeout, partial: true, want: "Partial: timeout"},
+		{name: "file limit", reasons: partialFileLimit, partial: true, want: "Partial: file limit"},
+		{name: "read error", reasons: partialReadError, partial: true, want: "Partial: read error"},
+		{name: "combined", reasons: partialTimeout | partialFileLimit | partialReadError, partial: true, want: "Partial: timeout, file limit, read error"},
+		{name: "legacy", partial: true, want: "Partial: scan incomplete"},
+		{name: "complete"},
+		{name: "scanning", reasons: partialTimeout, partial: true, scanning: true},
+		{name: "negative selection", partial: true, selected: -1},
+		{name: "past last selection", partial: true, selected: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := newModel("fixture")
+			m.width, m.height = 40, 9
+			m.scanning, m.selected = tc.scanning, tc.selected
+			m.entries = []dirEntry{{Name: "entry", Partial: tc.partial, PartialReasons: tc.reasons}}
+			view := assertViewFits(t, m)
+			if tc.want == "" {
+				if strings.Contains(view, "Partial:") {
+					t.Fatalf("unexpected partial status:\n%s", view)
+				}
+			} else if !strings.Contains(view, "\n"+tc.want+"\n") {
+				t.Fatalf("missing status %q:\n%s", tc.want, view)
+			}
+			m.entries = nil
+			if strings.Contains(assertViewFits(t, m), "Partial:") {
+				t.Fatal("empty listing retained partial status")
+			}
+		})
+	}
+}
+
+func TestAnalyzerPartialReasonFollowsSelection(t *testing.T) {
+	m := newModel("fixture")
+	m.width, m.height, m.scanning = 40, 9, false
+	m.entries = []dirEntry{
+		{Name: "zeta", Path: "zeta", Partial: true, PartialReasons: partialTimeout},
+		{Name: "alpha", Path: "alpha", Partial: true, PartialReasons: partialReadError},
+		{Name: "complete", Path: "complete"},
+	}
+	for _, step := range []struct {
+		key, want string
+	}{
+		{"j", "read error"},
+		{"s", "read error"},
+		{"/", "read error"},
+		{"zeta", "timeout"},
+		{"enter", "timeout"},
+		{"k", ""},
+	} {
+		m = searchKey(t, m, navigationKey(step.key))
+		view := assertViewFits(t, m)
+		if step.want == "" {
+			if strings.Contains(view, "Partial:") {
+				t.Fatal("complete selection retained partial status")
+			}
+		} else if !strings.Contains(view, "\nPartial: "+step.want+"\n") {
+			t.Fatalf("key %q did not display selected reason %q:\n%s", step.key, step.want, view)
+		}
+	}
+}
+
+func TestAnalyzerPartialReasonPreservesPageSize(t *testing.T) {
+	for _, size := range []tea.WindowSizeMsg{{Width: 40, Height: 9}, {Width: 60, Height: 15}, {Width: 80, Height: 24}} {
+		for _, panel := range []bool{false, true} {
+			for _, withError := range []bool{false, true} {
+				m := newModel("fixture")
+				m.width, m.height, m.scanning = size.Width, size.Height, false
+				m.showLargeFiles = panel
+				if withError {
+					m.err = errors.New(strings.Repeat("operation failed ", 30))
+				}
+				for i := 0; i < 40; i++ {
+					m.entries = append(m.entries, dirEntry{Name: fmt.Sprintf("entry-%02d", i), Size: 1})
+					m.largeFiles = append(m.largeFiles, fileEntry{Path: "large.bin", Size: 128 * 1024 * 1024})
+				}
+				m.totalSize = 40
+				page := strings.Count(assertViewFits(t, m), "entry-")
+				for i := range m.entries {
+					m.entries[i].Partial = true
+					m.entries[i].PartialReasons = partialTimeout | partialFileLimit | partialReadError
+				}
+				view := assertViewFits(t, m)
+				if strings.Count(view, "entry-") != page || !strings.Contains(view, "Partial: timeout, file limit, read error") {
+					t.Fatalf("partial status changed page size or was hidden:\n%s", view)
+				}
+				m = searchKey(t, m, navigationKey("pgdown"))
+				if m.selected != page || !strings.Contains(assertViewFits(t, m), m.entries[m.selected].Name) {
+					t.Fatal("partial status changed paging or hid selection")
+				}
+			}
+		}
+	}
+}
+
 func TestAnalyzerLayoutNavigationAndResize(t *testing.T) {
 	m := newModel(`C:\` + strings.Repeat("long-path\\", 20))
 	m.scanning = false
