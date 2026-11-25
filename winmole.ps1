@@ -233,14 +233,6 @@ function Show-SystemInfo {
 # ============================================================================
 
 function Main {
-    # Initialize
-    if ($Command -in @('analyze', 'status') -and @($CommandArgs) -match '^-{1,2}json$') {
-        Initialize-WinMole 6>$null
-    }
-    else {
-        Initialize-WinMole
-    }
-
     # Handle switches passed as strings (when called via batch file with quoted args)
     # e.g., winmole '-ShowHelp' becomes $Command = "-ShowHelp" instead of $ShowHelp = $true
     $effectiveShowHelp = $ShowHelp
@@ -268,6 +260,14 @@ function Main {
     if ($effectiveShowHelp -and -not $effectiveCommand) {
         Show-MainHelp
         return
+    }
+
+    # Initialize
+    if ($Command -in @('analyze', 'status') -and @($CommandArgs) -match '^-{1,2}json$') {
+        Initialize-WinMole 6>$null
+    }
+    else {
+        Initialize-WinMole
     }
 
     # If command specified, route to it
