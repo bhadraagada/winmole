@@ -5,7 +5,7 @@ go 1.24.2
 require (
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
-	github.com/charmbracelet/x/ansi v0.11.9
+	github.com/charmbracelet/x/ansi v0.11.10
 	github.com/rivo/uniseg v0.4.7
 	github.com/shirou/gopsutil/v3 v3.24.5
 )
