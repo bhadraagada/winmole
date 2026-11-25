@@ -44,6 +44,55 @@ function Invoke-PackageFixture {
     }
 }
 
+function Assert-AnalyzerReasonParity {
+    param(
+        [string]$Launcher,
+        [string]$Analyzer,
+        [string]$ScanRoot,
+        [string]$UnreadableName
+    )
+
+    $direct = Invoke-PackageFixture -Executable $Analyzer -WorkingDirectory $ScanRoot -Arguments '-json', '-path', $ScanRoot
+    $packaged = Invoke-PackageFixture -Executable $Launcher -WorkingDirectory $ScanRoot -Arguments 'analyze', $ScanRoot, '--json'
+    if ($direct.ExitCode -ne 0 -or $packaged.ExitCode -ne 0 -or
+        $direct.Stderr.Trim() -or $packaged.Stderr.Trim() -or $direct.Stdout.Trim() -cne $packaged.Stdout.Trim()) {
+        throw "Direct and portable analyzer reports differ: $($direct.Stderr) $($packaged.Stderr)"
+    }
+
+    $report = ConvertFrom-Json -InputObject $packaged.Stdout -AsHashtable
+    if ($UnreadableName) {
+        if ($report.partial -ne $true -or -not $report.Contains('partial_reasons') -or
+            @($report.partial_reasons).Count -ne 1 -or $report.partial_reasons[0] -cne 'read_error') {
+            throw 'Partial report did not emit exactly the expected stable read_error reason.'
+        }
+    }
+    elseif ($report.partial -ne $false -or $report.Contains('partial_reasons')) {
+        throw 'Complete report did not omit partial_reasons.'
+    }
+
+    $matchedUnreadable = 0
+    $matchedComplete = 0
+    foreach ($entry in $report.entries) {
+        if ($UnreadableName -and $entry.name -ceq $UnreadableName) {
+            $matchedUnreadable++
+            if ($entry.partial -ne $true -or -not $entry.Contains('partial_reasons') -or
+                @($entry.partial_reasons).Count -ne 1 -or $entry.partial_reasons[0] -cne 'read_error') {
+                throw 'Unreadable entry did not emit exactly the expected stable read_error reason.'
+            }
+        }
+        else {
+            $matchedComplete++
+            if ($entry.partial -ne $false -or $entry.Contains('partial_reasons')) {
+                throw 'A complete entry incorrectly emitted partial_reasons.'
+            }
+        }
+    }
+    $expectedUnreadable = if ($UnreadableName) { 1 } else { 0 }
+    if ($matchedUnreadable -ne $expectedUnreadable -or $matchedComplete -ne 1) {
+        throw 'Analyzer fixture entry coverage is incomplete.'
+    }
+}
+
 $windowsPowerShell = Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe'
 function Read-PowerShellPolicy {
     param([string]$Expression)
@@ -131,6 +180,31 @@ try {
     if ($legacy -and $legacy.Stdout.Trim() -cne $analyze.Stdout.Trim()) {
         throw 'Native default-directory JSON does not match legacy explicit-dot JSON.'
     }
+
+    $directAnalyzer = Join-Path $package 'bin/analyze.exe'
+    Assert-AnalyzerReasonParity -Launcher $resolved -Analyzer $directAnalyzer -ScanRoot $scan
+
+    # The deliberately dangling junction provides read_error deterministically,
+    # without demoting ACLs or waiting on timeouts. Its target never exists.
+    $partialRoot = (New-Item -ItemType Directory -Path (Join-Path $fixture 'partial fixture')).FullName
+    $danglingName = 'missing-target'
+    $junction = Join-Path $partialRoot $danglingName
+    $doesNotExist = Join-Path $fixture 'uncreated junction target'
+    $commandPrompt = Join-Path ([Environment]::SystemDirectory) 'cmd.exe'
+    [IO.File]::WriteAllBytes((Join-Path $partialRoot 'complete.txt'), [byte[]]@(1))
+    $created = Invoke-PackageFixture -Executable $commandPrompt -WorkingDirectory $partialRoot -Arguments (
+        '/d', '/c', 'mklink', '/J', $junction, $doesNotExist)
+    if ($created.ExitCode -ne 0) {
+        throw "Could not create the dangling-junction fixture: $($created.Stdout) $($created.Stderr)"
+    }
+    try {
+        Assert-AnalyzerReasonParity -Launcher $resolved -Analyzer $directAnalyzer -ScanRoot $partialRoot -UnreadableName $danglingName
+    }
+    finally {
+        # Remove the fixture junction itself, never the target or a tree below it.
+        [IO.Directory]::Delete($junction, $false)
+    }
+    Write-Host 'Direct and portable analyzer JSON preserve partial reasons and complete-scan omissions.'
 
     $relativePath = '..\Sibling [Ω] & space'
     $sibling = (New-Item -ItemType Directory -Path (Join-Path $fixture 'Sibling [Ω] & space')).FullName
