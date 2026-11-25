@@ -40,8 +40,10 @@ Describe 'Analyzer JSON command' {
         $report.path | Should -Be $fixture
         $report.total_bytes | Should -Be 5
         $report.partial | Should -BeFalse
+        @($report.PSObject.Properties.Name) | Should -Not -Contain 'partial_reasons'
         @($report.entries).Count | Should -Be 1
         $report.entries[0].name | Should -Be 'hello.txt'
+        @($report.entries[0].PSObject.Properties.Name) | Should -Not -Contain 'partial_reasons'
         [IO.File]::ReadAllText("$fixture\hello.txt") | Should -Be 'hello'
         Get-Content -LiteralPath $stderr -Raw | Should -BeNullOrEmpty
     }
