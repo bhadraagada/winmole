@@ -396,11 +396,6 @@ function Main {
         Clear-OrphanedAppData -DaysOld 60
     }
     
-    # Clean empty directories
-    Start-Section "Empty Directories"
-    Remove-EmptyDirectories -Path "$env:LOCALAPPDATA" -Description "Empty folders (LocalAppData)"
-    Stop-Section
-    
     # Show final summary
     $stats = Get-CleanupStats
     if ($stats.TotalItems -gt 0 -or (Test-DryRunMode)) {
