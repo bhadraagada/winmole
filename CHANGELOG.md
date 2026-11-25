@@ -49,6 +49,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Cleanup no longer scans all of LocalAppData for empty directories.
+
 - The installer refuses force-overwriting unrelated or unreadable directories.
 
 - Analyzer single and batch deletions are refused while `WINMOLE_DRY_RUN=1`,
