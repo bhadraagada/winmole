@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"github.com/winmole/winmole/cmd/winmole/internal/reportdispatch"
 	"golang.org/x/sys/windows"
 )
 
@@ -16,13 +17,21 @@ func powerShellArgs(script string, args []string) []string {
 	return append([]string{"-NoLogo", "-NoProfile", "-File", script}, args...)
 }
 
-func launch(args []string) error {
+func packageRoot() (string, error) {
 	executable, err := os.Executable()
 	if err != nil {
-		return err
+		return "", err
 	}
 	// WinGet's portable command alias can be a symlink outside the package.
 	target, err := filepath.EvalSymlinks(executable)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Dir(target), nil
+}
+
+func launch(args []string) error {
+	root, err := packageRoot()
 	if err != nil {
 		return err
 	}
@@ -31,7 +40,7 @@ func launch(args []string) error {
 		return err
 	}
 	powershell := filepath.Join(systemDir, "WindowsPowerShell", "v1.0", "powershell.exe")
-	script := filepath.Join(filepath.Dir(target), "winmole.ps1")
+	script := filepath.Join(root, "winmole.ps1")
 	if info, err := os.Stat(script); err != nil || !info.Mode().IsRegular() {
 		return fmt.Errorf("the WinMole script is missing or invalid: %s", script)
 	}
@@ -46,6 +55,13 @@ func main() {
 	if handled, err := writeMetadata(os.Stdout, args); handled {
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "WinMole:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if request, ok := reportdispatch.Parse(args); ok {
+		if err := runNativeReport(request); err != nil {
+			fmt.Fprintln(os.Stderr, "An error occurred:", err)
 			os.Exit(1)
 		}
 		return

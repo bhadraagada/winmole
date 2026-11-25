@@ -43,6 +43,12 @@ jobs:
         with:
           go-version: '1.24'
 
+      - name: Test the native report dispatcher
+        shell: pwsh
+        run: |
+          go test ./cmd/winmole/...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Build the release archive
         shell: pwsh
         run: ./scripts/build-portable-package.ps1 -Architecture $env:PACKAGE_ARCH -OutputDirectory artifacts
