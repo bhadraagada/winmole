@@ -4,6 +4,10 @@ on:
   push:
     tags:
       - 'v*'
+  pull_request:
+    paths:
+      - '.github/workflows/release.yml'
+      - 'scripts/build-portable-package.ps1'
 
 permissions:
   contents: read
@@ -41,6 +45,17 @@ jobs:
           ./scripts/build-portable-package.ps1 -Architecture amd64 -OutputDirectory artifacts
           ./scripts/build-portable-package.ps1 -Architecture arm64 -OutputDirectory artifacts
 
+      - name: Write checksums for the final ZIPs
+        shell: pwsh
+        run: |
+          $archives = @('winmole-windows-amd64.zip', 'winmole-windows-arm64.zip')
+          $lines = foreach ($archive in $archives) {
+              $hash = Get-FileHash -LiteralPath (Join-Path 'artifacts' $archive) -Algorithm SHA256 -ErrorAction Stop
+              "$($hash.Hash.ToLowerInvariant())  $archive"
+          }
+          $checksumPath = Join-Path ((Get-Item -LiteralPath 'artifacts').FullName) 'SHA256SUMS'
+          [IO.File]::WriteAllText($checksumPath, ($lines -join "`n") + "`n", [Text.Encoding]::ASCII)
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
@@ -49,6 +64,7 @@ jobs:
             artifacts/winmole-windows-amd64.zip
             artifacts/winmole-windows-arm64.zip
             artifacts/bin/*-windows-*.exe
+            artifacts/SHA256SUMS
           if-no-files-found: error
           retention-days: 5
 
@@ -81,9 +97,25 @@ jobs:
         shell: pwsh
         run: ./scripts/test-portable-package.ps1 -Archive "artifacts/winmole-windows-$env:PACKAGE_ARCH.zip"
 
+  verify:
+    name: Verify transferred ZIP checksums
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-binaries
+          path: artifacts
+
+      - name: Verify hashes against the downloaded ZIPs
+        shell: bash
+        working-directory: artifacts
+        run: sha256sum winmole-windows-amd64.zip winmole-windows-arm64.zip | cmp - SHA256SUMS
+
   release:
     name: Publish Release
-    needs: smoke
+    needs: [smoke, verify]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
     runs-on: ubuntu-latest
@@ -95,17 +127,19 @@ jobs:
           name: release-binaries
           path: artifacts
 
-      - name: Display structure
-        run: ls -R artifacts/
+      - name: Verify exact bytes before publication
+        shell: bash
+        working-directory: artifacts
+        run: sha256sum winmole-windows-amd64.zip winmole-windows-arm64.zip | cmp - SHA256SUMS
 
       - name: Create Release
         uses: softprops/action-gh-release@v3
-        if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
             artifacts/winmole-windows-amd64.zip
             artifacts/winmole-windows-arm64.zip
             artifacts/bin/*-windows-*.exe
+            artifacts/SHA256SUMS
           generate_release_notes: true
           draft: false
           prerelease: false
