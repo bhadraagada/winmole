@@ -96,6 +96,7 @@ Describe 'Status JSON command' {
         $process.ExitCode | Should -Be 0
         $report = Get-Content -LiteralPath $stdout -Raw | ConvertFrom-Json
         $report.collected_at | Should -Not -BeNullOrEmpty
+        @($report.PSObject.Properties.Name) | Should -Not -Contain 'networks'
         Get-Content -LiteralPath $stderr -Raw | Should -Match 'Build complete'
     }
 }
