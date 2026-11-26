@@ -425,8 +425,8 @@ type metricsMsg MetricsSnapshot
 
 func newModel() model {
 	return model{
-		collector: NewCollector(),
-		animFrame: 0,
+		collector:  NewCollector(),
+		collecting: true, // Init schedules the first sample.
 	}
 }
 
@@ -490,6 +490,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.sortByMemory = !m.sortByMemory
 			sortProcesses(m.metrics.Processes, m.sortByMemory)
 		case "r":
+			if m.collecting {
+				return m, nil
+			}
 			m.collecting = true
 			return m, m.collectMetrics()
 		}
@@ -500,6 +503,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		m.animFrame++
 		if m.animFrame%2 == 0 && !m.collecting {
+			m.collecting = true
 			return m, tea.Batch(
 				m.collectMetrics(),
 				tickCmd(),
