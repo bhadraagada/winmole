@@ -19,8 +19,8 @@ jobs:
     env:
       WINGET_BUNDLE_SHA256: 65dea9c01ce08ee7b763366b27c0e651f97db857c11ca9b9c301826c10092f2e
       WINGET_DEPENDENCIES_SHA256: ba875afe9d190f61218985ac0292a99d1db710bf93e13c68944ca9d89f0d82d1
-      CANDIDATE_ARM64_SHA256: db94fd089e61453318e5e759cf42faa1c18052b39a96b5038ab6e4e183eb9b94
-      CANDIDATE_X64_SHA256: 03d6de7eb59c1a59c29067abdd7036c5c164dad933de4781ce57e96c2f3bd738
+      CANDIDATE_ARM64_SHA256: 87c20051063e4e53a888d2fa76607ebefc4b380b2796047473633fab78f8c302
+      CANDIDATE_X64_SHA256: d7ac2b9853bc540a20e8099b168c24ecc257d893a95ff8e2733cf109e1e0f953
     steps:
       - name: Observe bare runner's Windows PowerShell policy
         shell: cmd
@@ -31,22 +31,24 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/download-artifact@v8
-        with:
-          name: release-binaries
-          run-id: 46134683589
-          github-token: ${{ github.token }}
-          path: exact-candidate
-
-      - name: Verify exact current ZIP hashes before packaging-only checks
+      - name: Independently verify published HTTPS assets before WinGet checks
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          if ((Get-FileHash -LiteralPath 'exact-candidate/winmole-windows-amd64.zip').Hash -ne $env:CANDIDATE_X64_SHA256 -or
-              (Get-FileHash -LiteralPath 'exact-candidate/winmole-windows-arm64.zip').Hash -ne $env:CANDIDATE_ARM64_SHA256) {
-            throw 'Wrong exact ZIP'
+          $base = 'https://github.com/bhadraagada/winmole/releases/download/v0.1.2'
+          $null = New-Item -ItemType Directory -Path 'exact-candidate'
+          $expected = @{
+            'winmole-windows-amd64.zip' = $env:CANDIDATE_X64_SHA256
+            'winmole-windows-arm64.zip' = $env:CANDIDATE_ARM64_SHA256
           }
-          Write-Host 'Both staged ZIP hashes match. Testing install lifecycle and native reports only, not script-backed cleanup.'
+          foreach ($asset in $expected.Keys) {
+            $path = Join-Path 'exact-candidate' $asset
+            & curl.exe --proto '=https' --proto-redir '=https' --fail --location --silent --show-error --max-time 100 --output $path "$base/$asset"
+            if ($LASTEXITCODE -ne 0) { throw "Official release asset download failed: $asset" }
+            $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
+            if ($actual -ne $expected[$asset]) { throw "Unexpected release SHA-256 for $asset" }
+            Write-Host "Verified $base/$asset SHA-256: $actual"
+          }
 
       - name: Observe or bootstrap signed stable Microsoft WinGet
         if: ${{ always() }}
@@ -133,7 +135,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'WinGet admin-settings observation failed' }
           "WINGET_QA_EXE=$exe" | Out-File -LiteralPath $env:GITHUB_ENV -Encoding UTF8 -Append
 
-      - name: Run real WinGet validation against hash-exact QA metadata (no install)
+      - name: Run real WinGet validation against manifest against versioned public release URLs
         if: ${{ always() && env.WINGET_QA_EXE != '' }}
         shell: pwsh
         run: |
@@ -165,10 +167,10 @@ jobs:
             PortableCommandAlias: winmole
           Installers:
           - Architecture: x64
-            InstallerUrl: https://example.invalid/winmole-windows-amd64.zip
+            InstallerUrl: https://github.com/bhadraagada/winmole/releases/download/v0.1.2/winmole-windows-amd64.zip
             InstallerSha256: $env:CANDIDATE_X64_SHA256
           - Architecture: arm64
-            InstallerUrl: https://example.invalid/winmole-windows-arm64.zip
+            InstallerUrl: https://github.com/bhadraagada/winmole/releases/download/v0.1.2/winmole-windows-arm64.zip
             InstallerSha256: $env:CANDIDATE_ARM64_SHA256
           ManifestType: installer
           "@
@@ -177,10 +179,10 @@ jobs:
           Set-Content -LiteralPath (Join-Path $m 'BhadraGada.WinMole.locale.en-US.yaml') -Value "$common`n$locale" -Encoding utf8NoBOM
           & $env:WINGET_QA_EXE validate --manifest $m
           if ($LASTEXITCODE -ne 0) { throw 'WinGet validate failed' }
-          Write-Host 'Validation only: URLs are intentionally unpublished; no LocalManifestFiles or trust changes.'
+          Write-Host 'Manifest validation succeeded for official versioned GitHub release URLs.'
 
 
-      - name: Exercise actual WinGet user-scope portable lifecycle on exact staged artifacts
+      - name: Exercise actual WinGet user-scope portable lifecycle on exact published release artifacts
         if: ${{ always() && env.WINGET_QA_EXE != '' }}
         timeout-minutes: 5
         shell: pwsh
