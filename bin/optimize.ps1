@@ -739,7 +739,7 @@ function Main {
     }
 
     # Set dry-run mode
-    $script:DryRun = $DryRun
+    $script:DryRun = $DryRun -or ($env:WINMOLE_DRY_RUN -eq "1")
 
     # Clear screen
     Clear-Host

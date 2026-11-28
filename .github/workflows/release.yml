@@ -8,6 +8,10 @@ on:
     paths:
       - '.github/workflows/release.yml'
       - 'scripts/build-portable-package.ps1'
+      - 'scripts/test-portable-package.ps1'
+      - 'bin/clean.ps1'
+      - 'lib/core/file_ops.ps1'
+      - 'winmole.ps1'
 
 permissions:
   contents: read
