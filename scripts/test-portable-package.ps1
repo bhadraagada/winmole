@@ -12,7 +12,10 @@ if ($env:PSExecutionPolicyPreference) {
 }
 
 function Invoke-PackageFixture {
-    param([string]$Executable, [string]$WorkingDirectory, [string[]]$Arguments)
+    param(
+        [string]$Executable, [string]$WorkingDirectory, [string[]]$Arguments,
+        [hashtable]$Environment = @{}
+    )
 
     $start = [Diagnostics.ProcessStartInfo]::new($Executable)
     $start.WorkingDirectory = $WorkingDirectory
@@ -22,6 +25,10 @@ function Invoke-PackageFixture {
     $start.RedirectStandardError = $true
     $start.StandardOutputEncoding = [Text.Encoding]::UTF8
     $start.StandardErrorEncoding = [Text.Encoding]::UTF8
+    foreach ($name in $Environment.Keys) {
+        if ($null -eq $Environment[$name]) { $null = $start.Environment.Remove($name) }
+        else { $start.Environment[$name] = $Environment[$name] }
+    }
     foreach ($argument in $Arguments) { $start.ArgumentList.Add($argument) }
     $process = [Diagnostics.Process]::Start($start)
     try {
@@ -41,6 +48,57 @@ function Invoke-PackageFixture {
     }
     finally {
         $process.Dispose()
+    }
+}
+
+function Assert-CleanPreviewPreservesFixture {
+    param([string]$Package, [string]$Alias, [string]$PowerShell, [string]$Fixture)
+
+    $cleanFixture = (New-Item -ItemType Directory -Path (Join-Path $Fixture 'isolated cleanup profile')).FullName
+    $local = (New-Item -ItemType Directory -Path (Join-Path $cleanFixture 'Local')).FullName
+    $roaming = (New-Item -ItemType Directory -Path (Join-Path $cleanFixture 'Roaming')).FullName
+    $temp = (New-Item -ItemType Directory -Path (Join-Path $cleanFixture 'Temp')).FullName
+    $cache = (New-Item -ItemType Directory -Path (Join-Path $local 'D3DSCache')).FullName
+    $sentinel = Join-Path $cache 'fixture-only.bin'
+    $router = Join-Path $Package 'winmole.ps1'
+    $clean = Join-Path $Package 'bin/clean.ps1'
+    $base = @('-NoLogo', '-NoProfile', '-NonInteractive', '-File')
+    $envOnly = @{
+        USERPROFILE = $cleanFixture
+        LOCALAPPDATA = $local
+        APPDATA = $roaming
+        TEMP = $temp
+        TMP = $temp
+        WINMOLE_DRY_RUN = $null
+    }
+    $cases = @(
+        @{ Name = 'portable launcher'; Exe = (Join-Path $Package 'winmole.exe'); Args = @('clean', '-DryRun', '-GPUShaders') }
+        @{ Name = 'portable alias'; Exe = $Alias; Args = @('clean', '--dry-run', '-GPUShaders') }
+        @{ Name = 'PowerShell router'; Exe = $PowerShell; Args = $base + @($router, 'clean', '-DryRun', '-GPUShaders') }
+        @{ Name = 'PowerShell router alias'; Exe = $PowerShell; Args = $base + @($router, 'clean', '--dry-run', '-GPUShaders') }
+        @{ Name = 'PowerShell clean command'; Exe = $PowerShell; Args = $base + @($clean, '-DryRun', '-GPUShaders') }
+        @{ Name = 'environment preview'; Exe = (Join-Path $Package 'winmole.exe'); Args = @('clean', '-GPUShaders'); EnvSwitch = $true }
+    )
+    foreach ($case in $cases) {
+        [IO.File]::WriteAllBytes($sentinel, [byte[]]@(1, 2, 3, 4))
+        $before = (Get-FileHash -LiteralPath $sentinel -Algorithm SHA256).Hash
+        $childEnv = $envOnly.Clone()
+        if ($case.EnvSwitch) { $childEnv.WINMOLE_DRY_RUN = '1' }
+        $result = Invoke-PackageFixture -Executable $case.Exe -WorkingDirectory $cleanFixture -Arguments $case.Args -Environment $childEnv
+        Write-Host "Clean preview ($($case.Name)), exit $($result.ExitCode):"
+        Write-Host $result.Stdout
+        if ($result.Stderr) { Write-Host $result.Stderr }
+        if (-not (Test-Path -LiteralPath $sentinel -PathType Leaf) -or
+            (Get-FileHash -LiteralPath $sentinel -Algorithm SHA256).Hash -cne $before) {
+            throw "Clean preview altered the fixture sentinel ($($case.Name))."
+        }
+        if ($result.ExitCode -ne 0 -or $result.Stderr.Trim() -or
+            $result.Stdout -notmatch 'DRY RUN MODE' -or
+            $result.Stdout -notmatch '(?m)DirectX shader cache[^\r\n]*1 items, 4 B dry' -or
+            $result.Stdout -notmatch 'Would clean') {
+            throw "Clean preview did not report the expected disposable GPU cache item ($($case.Name))."
+        }
+        Write-Host "Clean preview preserved exact SHA256 and reported the cache item ($($case.Name))."
     }
 }
 
@@ -148,6 +206,7 @@ try {
         $env:USERPROFILE = (New-Item -ItemType Directory -Path (
             Join-Path $fixture 'legacy temporary profile')).FullName
         try {
+            Assert-CleanPreviewPreservesFixture -Package $package -Alias $resolved -PowerShell $windowsPowerShell -Fixture $fixture
             $legacy = Invoke-PackageFixture -Executable $windowsPowerShell -WorkingDirectory $scan -Arguments (
                 '-NoLogo', '-NoProfile', '-File', $script, 'AnAlYzE', '.', '-JsOn')
             if ($legacy.ExitCode -ne 0) { throw "Legacy analyzer baseline failed: $($legacy.Stderr)" }
