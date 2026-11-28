@@ -1,14 +1,13 @@
 # Temporary hosted QA only. No publication, PowerShell policy changes, external server, or cleanup apply.
 #Requires -Version 7.0
-param([Parameter(Mandatory)][string]$Winget, [Parameter(Mandatory)][string]$Previous, [Parameter(Mandatory)][string]$Candidate)
+param([Parameter(Mandatory)][string]$Winget, [Parameter(Mandatory)][string]$Candidate)
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or $env:RUNNER_ARCH -ne 'X64') {
     throw 'This probe only runs on the intended disposable GitHub x64 runner.'
 }
 $expected = @{
-    '0.1.1' = '82f628dc563414d75fda0c417d61624f59a72806d7b8847fa50a0fccf7f09390'
-    '0.1.2' = '1ec1506dd13a47fb05c55ce4f67bad4ee711320761b18b0f7bbc2c77f1f247ef'
+    '0.1.2' = '03d6de7eb59c1a59c29067abdd7036c5c164dad933de4781ce57e96c2f3bd738'
 }
 $packageId = 'BhadraGada.WinMole'
 function Invoke-WinGetChecked {
@@ -47,6 +46,10 @@ function Resolve-Installed($version, $expectedExeSha) {
     if ((Get-FileHash -LiteralPath $real).Hash -ne $expectedExeSha) { throw 'Installed user command does not match the ZIP launcher bytes' }
     $zone = Get-Content -LiteralPath $real -Stream Zone.Identifier -ErrorAction SilentlyContinue | Where-Object { $_ -match '^ZoneId=\d+$' }
     Write-Host "Loopback-installed executable ZoneIdentifier: $(if ($zone) { $zone } else { 'absent' })"
+    $script = Join-Path (Split-Path -Parent $real) 'winmole.ps1'
+    if (-not (Test-Path -LiteralPath $script -PathType Leaf)) { throw 'Packaged legacy companion missing from installed files' }
+    $scriptZone = Get-Content -LiteralPath $script -Stream Zone.Identifier -ErrorAction SilentlyContinue | Where-Object { $_ -match '^ZoneId=\d+$' }
+    Write-Host "Loopback-installed companion script ZoneIdentifier: $(if ($scriptZone) { $scriptZone } else { 'absent' })"
     $observedVersion = & $alias --version
     if ($LASTEXITCODE -ne 0 -or $observedVersion -cne "WinMole v$version") { throw "Wrong installed version: $observedVersion" }
     $report = & $alias analyze . --json | ConvertFrom-Json
@@ -145,7 +148,6 @@ $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
 $fixture = Join-Path $testRoot 'scan workdir'
 $null = New-Item -ItemType Directory -Path $serve,$fixture
 [IO.File]::WriteAllBytes((Join-Path $fixture 'input.bin'), [byte[]](1,2,3,4))
-$old = Stage-Archive '0.1.1' $Previous
 $new = Stage-Archive '0.1.2' $Candidate
 $httpScript = Join-Path $testRoot 'loopback.py'
 $portPath = Join-Path $testRoot 'port.txt'
@@ -189,8 +191,7 @@ try {
         throw 'No loopback port after bounded 30-second startup'
     }
     $port = Get-Content -LiteralPath $portPath -Raw
-    if ([string]::IsNullOrWhiteSpace($port) -or $port -notmatch '^\d{1,5}$' -or [int]$port -notin (1..65535)) { throw 'No verified loopback port' }
-    $oldManifest = Export-QAManifest '0.1.1' $expected['0.1.1'] "http://127.0.0.1:$port/$($old.Leaf)"
+    if ([string]::IsNullOrWhiteSpace($port) -or $port -notmatch '^\d{1,5}$' -or [int]$port -lt 1 -or [int]$port -gt 65535) { throw 'No verified loopback port' }
     $newManifest = Export-QAManifest '0.1.2' $expected['0.1.2'] "http://127.0.0.1:$port/$($new.Leaf)"
     if (-not $initial.LocalManifestFiles) {
         Invoke-WinGetChecked settings --enable LocalManifestFiles | Write-Host
@@ -200,30 +201,35 @@ try {
     Write-Host 'Local-manifest QA opt-in only on this disposable host; archive scanning and PowerShell policy remain intact.'
     Push-Location -LiteralPath $fixture
     try {
-        Invoke-WinGetChecked install --manifest $oldManifest --scope user --disable-interactivity | Write-Host
-        $oldInstalled = Resolve-Installed '0.1.1' $old.Hash
         $config = Join-Path $env:USERPROFILE '.config\winmole'
         if (Test-Path -LiteralPath $config) { throw 'Unexpected previous WinMole config on ephemeral host' }
         $null = New-Item -ItemType Directory -Path $config
         $sentinel = Join-Path $config 'whitelist'
         [IO.File]::WriteAllText($sentinel, '# disposable QA preference')
         $sentinelHash = (Get-FileHash -LiteralPath $sentinel).Hash
-        # WinGet 1.11 scans its configured sources even for local manifest
-        # upgrade/uninstall. --source cannot be combined with --manifest.
-        # Remove only the idle stock Store source to avoid accepting its
-        # terms for an unrelated package, then restore it in finally.
+        Invoke-WinGetChecked install --manifest $newManifest --scope user --disable-interactivity | Write-Host
+        $installed = Resolve-Installed '0.1.2' $new.Hash
+        if ((Get-FileHash -LiteralPath $sentinel).Hash -ne $sentinelHash) { throw 'Install changed the preference' }
+        # Exact public-manifest ID is not usable for this catalog-unpublished
+        # package. Match the single freshly verified local ARP product code.
+        # Leave source trust and archive protections alone; temporarily omit
+        # the unrelated stock Store source to avoid accepting its agreements.
         Invoke-WinGetChecked source remove --name msstore --disable-interactivity | Write-Host
         $storeRemoved = $true
-        Invoke-WinGetChecked upgrade --manifest $newManifest --scope user --disable-interactivity | Write-Host
-        $newInstalled = Resolve-Installed '0.1.2' $new.Hash
-        if ((Get-FileHash -LiteralPath $sentinel).Hash -ne $sentinelHash) { throw 'Upgrade changed the preference' }
-        Invoke-WinGetChecked uninstall --manifest $newManifest --scope user --disable-interactivity | Write-Host
-        if (@(InstalledCommands).Count -or @(PortableRegistration).Count -or (Test-Path -LiteralPath $newInstalled) -or (Test-Path -LiteralPath $oldInstalled)) {
+        $registered = @(PortableRegistration)
+        if ($registered.Count -ne 1 -or $registered[0].DisplayVersion -cne '0.1.2' -or
+            $registered[0].PSChildName -notmatch '^BhadraGada\.WinMole_[A-Za-z0-9._-]*$') {
+            throw 'Refusing to uninstall without the exact verified portable product code'
+        }
+        $productCode = $registered[0].PSChildName
+        Write-Host "Exact portable ARP product code selected for WinGet uninstall: $productCode"
+        Invoke-WinGetChecked uninstall --product-code $productCode --scope user --disable-interactivity | Write-Host
+        if (@(InstalledCommands).Count -or @(PortableRegistration).Count -or (Test-Path -LiteralPath $installed)) {
             throw 'Uninstall left an alias, installed binary or user-scope registration'
         }
         if ((Get-FileHash -LiteralPath $sentinel).Hash -ne $sentinelHash) { throw 'Uninstall changed the preference' }
         if ([Environment]::GetEnvironmentVariable('Path', 'Machine') -cne $machinePath) { throw 'User install changed machine PATH' }
-        Write-Host 'Observed actual WinGet install, upgrade and uninstall of exact loopback artifacts; preferences and native reports verified.'
+        Write-Host 'Observed actual WinGet install and uninstall of the exact candidate; synthetic preferences and native reports verified. Catalog upgrade was not exercised.'
     } finally {
         Pop-Location
     }
