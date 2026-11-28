@@ -6,6 +6,7 @@ on:
       - dot/winget-client-probe
     paths:
       - .github/workflows/winget-client-probe.yml
+      - scripts/test-winget-local-lifecycle.ps1
 
 permissions:
   actions: read
@@ -14,24 +15,35 @@ permissions:
 jobs:
   arm64-client:
     runs-on: windows-11-arm
-    timeout-minutes: 12
+    timeout-minutes: 15
     env:
       WINGET_BUNDLE_SHA256: 65dea9c01ce08ee7b763366b27c0e651f97db857c11ca9b9c301826c10092f2e
       WINGET_DEPENDENCIES_SHA256: ba875afe9d190f61218985ac0292a99d1db710bf93e13c68944ca9d89f0d82d1
-      CANDIDATE_ARM64_SHA256: 07f3e34d131aad82a1691824131232396b0336836908267b3e7c88045aa44910
-      CANDIDATE_X64_SHA256: 82f628dc563414d75fda0c417d61624f59a72806d7b8847fa50a0fccf7f09390
+      CANDIDATE_ARM64_SHA256: ec4b66e00cbca86c56e2d56a43a9f8fafede3dc26b2cfee106e24bdaf4ff94ec
+      CANDIDATE_X64_SHA256: 1ec1506dd13a47fb05c55ce4f67bad4ee711320761b18b0f7bbc2c77f1f247ef
     steps:
       - name: Observe bare runner's Windows PowerShell policy
         shell: cmd
         run: |
           "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -Command "Get-CimInstance Win32_OperatingSystem | Select-Object Caption,Version,ProductType | Format-List; Get-ExecutionPolicy; Get-ExecutionPolicy -List | Format-Table -AutoSize; Write-Output ('Process policy environment set: ' + (Test-Path Env:PSExecutionPolicyPreference))"
 
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-binaries
+          run-id: 46133259807
+          github-token: ${{ github.token }}
+          path: exact-candidate
+
       - uses: actions/download-artifact@v8
         with:
           name: release-binaries
           run-id: 45727716325
           github-token: ${{ github.token }}
-          path: exact-candidate
+          path: exact-previous
 
       - name: Exercise exact ARM64 ZIP with synthetic read and cleanup preview
         shell: pwsh
@@ -100,8 +112,10 @@ jobs:
             $depName = 'DesktopAppInstaller_Dependencies.zip'
             $bundle = Join-Path $root $bundleName
             $deps = Join-Path $root $depName
-            Invoke-WebRequest -UseBasicParsing -Uri "$base/$bundleName" -OutFile $bundle
-            Invoke-WebRequest -UseBasicParsing -Uri "$base/$depName" -OutFile $deps
+            & curl.exe --fail --location --silent --show-error --max-time 120 --output $bundle "$base/$bundleName"
+            if ($LASTEXITCODE -ne 0) { throw 'Could not obtain signed stable Microsoft bundle' }
+            & curl.exe --fail --location --silent --show-error --max-time 120 --output $deps "$base/$depName"
+            if ($LASTEXITCODE -ne 0) { throw 'Could not obtain stable Microsoft bundle dependencies' }
             if ((Get-FileHash -LiteralPath $bundle).Hash -ne $env:WINGET_BUNDLE_SHA256 -or
                 (Get-FileHash -LiteralPath $deps).Hash -ne $env:WINGET_DEPENDENCIES_SHA256) {
               throw 'Unexpected Microsoft App Installer release bytes'
@@ -137,7 +151,7 @@ jobs:
           $null = New-Item -ItemType Directory -Path $m
           $common = @'
           PackageIdentifier: BhadraGada.WinMole
-          PackageVersion: 0.1.1
+          PackageVersion: 0.1.2
           ManifestVersion: 1.6.0
           '@
           $version = @'
@@ -174,3 +188,10 @@ jobs:
           & $env:WINGET_QA_EXE validate --manifest $m
           if ($LASTEXITCODE -ne 0) { throw 'WinGet validate failed' }
           Write-Host 'Validation only: URLs are intentionally unpublished; no LocalManifestFiles or trust changes.'
+
+
+      - name: Exercise actual WinGet user-scope portable lifecycle on exact staged artifacts
+        if: ${{ always() && env.WINGET_QA_EXE != '' }}
+        shell: pwsh
+        run: |
+          ./scripts/test-winget-local-lifecycle.ps1 -Winget $env:WINGET_QA_EXE -Previous 'exact-previous/winmole-windows-arm64.zip' -Candidate 'exact-candidate/winmole-windows-arm64.zip'
