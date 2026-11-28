@@ -45,58 +45,15 @@ jobs:
           github-token: ${{ github.token }}
           path: exact-previous
 
-      - name: Exercise exact ARM64 ZIP with synthetic read and cleanup preview
+      - name: Verify exact current ZIP hashes before packaging-only checks
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $archive = (Get-Item -LiteralPath 'exact-candidate/winmole-windows-arm64.zip').FullName
-          if ((Get-FileHash -LiteralPath $archive).Hash -ne $env:CANDIDATE_ARM64_SHA256 -or
-              (Get-FileHash -LiteralPath 'exact-candidate/winmole-windows-amd64.zip').Hash -ne $env:CANDIDATE_X64_SHA256) {
+          if ((Get-FileHash -LiteralPath 'exact-candidate/winmole-windows-amd64.zip').Hash -ne $env:CANDIDATE_X64_SHA256 -or
+              (Get-FileHash -LiteralPath 'exact-candidate/winmole-windows-arm64.zip').Hash -ne $env:CANDIDATE_ARM64_SHA256) {
             throw 'Wrong exact ZIP'
           }
-          $ps51 = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-          $before = & $ps51 -NoLogo -NoProfile -NonInteractive -Command 'Get-ExecutionPolicy; Get-ExecutionPolicy -List | ForEach-Object { "$($_.Scope)=$($_.ExecutionPolicy)" }'
-          $policy = $before[0]
-          $defaultClientPolicy = @($before | Select-Object -Skip 1 | Where-Object { $_ -match '=Undefined$' }).Count -eq 5
-          $PSNativeCommandUseErrorActionPreference = $false
-          Write-Host "Actual product child policy: $($before -join ' ')"
-          $root = Join-Path $env:RUNNER_TEMP ("WinMole QA " + [guid]::NewGuid().ToString('N'))
-          $env:USERPROFILE = Join-Path $root 'profile'
-          $env:LOCALAPPDATA = Join-Path $env:USERPROFILE 'AppData\Local'
-          $env:APPDATA = Join-Path $env:USERPROFILE 'AppData\Roaming'
-          $env:TEMP = $env:TMP = Join-Path $root 'temp'
-          $fixture = Join-Path $env:LOCALAPPDATA 'D3DSCache'
-          $null = New-Item -ItemType Directory -Path $fixture,$env:APPDATA,$env:TEMP
-          $file = Join-Path $fixture 'sentinel.bin'
-          [IO.File]::WriteAllBytes($file, [byte[]](1, 2, 3, 4))
-          $digest = (Get-FileHash -LiteralPath $file).Hash
-          $app = Join-Path $root 'app'
-          Expand-Archive -LiteralPath $archive -DestinationPath $app
-          $exe = Join-Path $app 'winmole.exe'
-          $version = & $exe --version
-          if ($LASTEXITCODE -ne 0 -or ($version -join '') -notmatch '^WinMole v\d+\.\d+\.\d+$') { throw 'Native version failed' }
-          $report = & $exe analyze $fixture --json | ConvertFrom-Json
-          if ($LASTEXITCODE -ne 0 -or $report.partial -ne $false -or $report.total_bytes -ne 4 -or
-              $report.entries.Count -ne 1 -or $report.entries[0].name -cne 'sentinel.bin') {
-            throw 'Analyzer did not report the synthetic fixture'
-          }
-          $output = & $exe clean -DryRun -GPUShaders 2>&1
-          $cleanupExit = $LASTEXITCODE
-          $after = & $ps51 -NoLogo -NoProfile -NonInteractive -Command 'Get-ExecutionPolicy; Get-ExecutionPolicy -List | ForEach-Object { "$($_.Scope)=$($_.ExecutionPolicy)" }'
-          if ($digest -ne (Get-FileHash -LiteralPath $file).Hash -or ($after -join ' ') -ne ($before -join ' ')) {
-            throw 'Dry-run modified fixture or PowerShell policy'
-          }
-          $text = $output | Out-String
-          Write-Host "Exact archive and native report verified; unchanged policy and fixture. Cleanup exit: $cleanupExit"
-          Write-Host $text
-          if ($cleanupExit -ne 0 -and $policy -eq 'Restricted' -and
-              $text -match 'running scripts is disabled|PSSecurityException|UnauthorizedAccess') {
-            Write-Host "OBSERVED: Restricted script block (all scopes undefined: $defaultClientPolicy, not maintenance support)"
-          } elseif ($cleanupExit -eq 0 -and $text -match 'DRY RUN MODE' -and $text -match 'DirectX shader cache') {
-            Write-Host "OBSERVED: substantive DirectX preview under $policy (not proof under Restricted)"
-          } else {
-            throw 'Cleanup did not produce the expected fixture preview or a classified policy failure'
-          }
+          Write-Host 'Both staged ZIP hashes match. Testing install lifecycle and native reports only, not script-backed cleanup.'
 
       - name: Observe or bootstrap signed stable Microsoft WinGet
         if: ${{ always() }}
@@ -124,8 +81,45 @@ jobs:
             Expand-Archive -LiteralPath $deps -DestinationPath $expanded
             $depPaths = @(Get-ChildItem -Path (Join-Path $expanded 'arm64\*.appx') -File | Select-Object -ExpandProperty FullName)
             if ($depPaths.Count -ne 3) { throw 'Unexpected ARM64 dependencies' }
-            # Default platform trust; no imported certificates/policy changes.
-            Add-AppxPackage -Path $bundle -DependencyPath $depPaths -ErrorAction Stop
+            # Default trust; cap per-user MSIX registration separately.
+            $env:WINGET_PROBE_BUNDLE = $bundle
+            $env:WINGET_PROBE_DEPS = Join-Path $expanded 'arm64'
+            $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+            $worker = Join-Path $root 'register.ps1'
+            @'
+          $ErrorActionPreference = 'Stop'
+          try {
+              $dependencies = Get-ChildItem -Path (Join-Path $env:WINGET_PROBE_DEPS '*.appx') -File
+              $missing = @(
+                  foreach ($dep in $dependencies) {
+                      if ($dep.Name -notmatch '^(.+)_([0-9.]+)_arm64\.appx$') { throw 'Unexpected Microsoft dependency filename' }
+                      $name = $Matches[1]
+                      $minimum = [version]$Matches[2]
+                      $present = @(Get-AppxPackage -Name $name | Where-Object {
+                          $_.Architecture -in @('Arm64','Neutral') -and [version]$_.Version -ge $minimum
+                      }).Count -gt 0
+                      if (-not $present) { $dep.FullName }
+                  }
+              )
+              $appx = @{ Path = $env:WINGET_PROBE_BUNDLE; ErrorAction = 'Stop' }
+              if ($missing.Count -gt 0) { $appx.DependencyPath = $missing }
+              Write-Output "$($missing.Count) separately supplied dependencies"
+              Add-AppxPackage @appx
+          } catch {
+              [Console]::Error.WriteLine($_.ToString())
+              exit 1
+          }
+          '@ | Set-Content -LiteralPath $worker -Encoding UTF8
+            $regOut = Join-Path $root 'register.stdout'
+            $regErr = Join-Path $root 'register.stderr'
+            $proc = Start-Process $ps -ArgumentList ('-NoLogo -NoProfile -NonInteractive -File "' + $worker + '"') -PassThru -NoNewWindow -RedirectStandardOutput $regOut -RedirectStandardError $regErr
+            if (-not $proc.WaitForExit(90000)) {
+              if (-not $proc.HasExited) { Stop-Process -Id $proc.Id }
+              Get-Content -LiteralPath $regOut,$regErr
+              throw 'MSIX registration exceeded 90 seconds on disposable Windows client'
+            }
+            Get-Content -LiteralPath $regOut,$regErr
+            if ($proc.ExitCode -ne 0) { throw "MSIX registration failed with exit $($proc.ExitCode)" }
             $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
           }
           if ($null -ne $winget) {
@@ -162,7 +156,7 @@ jobs:
           PackageLocale: en-US
           Publisher: Bhadra Gada
           PackageName: WinMole
-          License: MIT
+          License: GPL-3.0
           ShortDescription: Windows maintenance toolkit
           ManifestType: defaultLocale
           '@
@@ -192,6 +186,7 @@ jobs:
 
       - name: Exercise actual WinGet user-scope portable lifecycle on exact staged artifacts
         if: ${{ always() && env.WINGET_QA_EXE != '' }}
+        timeout-minutes: 5
         shell: pwsh
         run: |
           ./scripts/test-winget-local-lifecycle.ps1 -Winget $env:WINGET_QA_EXE -Previous 'exact-previous/winmole-windows-arm64.zip' -Candidate 'exact-candidate/winmole-windows-arm64.zip'

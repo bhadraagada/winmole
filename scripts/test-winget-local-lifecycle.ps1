@@ -45,6 +45,8 @@ function Resolve-Installed($version, $expectedExeSha) {
         throw 'PATH resolves outside the intended per-user WinGet install root'
     }
     if ((Get-FileHash -LiteralPath $real).Hash -ne $expectedExeSha) { throw 'Installed user command does not match the ZIP launcher bytes' }
+    $zone = Get-Content -LiteralPath $real -Stream Zone.Identifier -ErrorAction SilentlyContinue | Where-Object { $_ -match '^ZoneId=\d+$' }
+    Write-Host "Loopback-installed executable ZoneIdentifier: $(if ($zone) { $zone } else { 'absent' })"
     $observedVersion = & $alias --version
     if ($LASTEXITCODE -ne 0 -or $observedVersion -cne "WinMole v$version") { throw "Wrong installed version: $observedVersion" }
     $report = & $alias analyze . --json | ConvertFrom-Json
@@ -74,7 +76,7 @@ ManifestType: version
 PackageLocale: en-US
 Publisher: Bhadra Gada
 PackageName: WinMole
-License: MIT
+License: GPL-3.0
 ShortDescription: Windows maintenance toolkit
 ManifestType: defaultLocale
 '@
