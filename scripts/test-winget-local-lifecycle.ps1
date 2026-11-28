@@ -86,7 +86,6 @@ NestedInstallerType: portable
 NestedInstallerFiles:
 - RelativeFilePath: winmole.exe
   PortableCommandAlias: winmole
-Scope: user
 Installers:
 - Architecture: x64
   InstallerUrl: $url
@@ -141,7 +140,10 @@ with ThreadingHTTPServer(("127.0.0.1", 0), SimpleHTTPRequestHandler) as server:
     Path("../port.txt").write_text(str(server.server_port), encoding="ascii")
     server.serve_forever()
 '@ | Set-Content -LiteralPath $httpScript -Encoding utf8NoBOM
-$python = (Get-Command python.exe -CommandType Application).Source
+$python = Get-Command python.exe -All -CommandType Application | Where-Object {
+    $_.Source -notlike '*\WindowsApps\python.exe'
+} | Select-Object -First 1 -ExpandProperty Source
+if (-not $python) { throw 'No real Python executable available for loopback artifact server' }
 $server = Start-Process $python -WorkingDirectory $serve -ArgumentList ('"' + $httpScript + '"') -PassThru -NoNewWindow
 $changed = $false
 try {

@@ -166,7 +166,6 @@ jobs:
           NestedInstallerFiles:
           - RelativeFilePath: winmole.exe
             PortableCommandAlias: winmole
-          Scope: user
           Installers:
           - Architecture: x64
             InstallerUrl: https://example.invalid/winmole-windows-amd64.zip
