@@ -1,6 +1,6 @@
 # Temporary hosted QA only. Installs only a SHA-pinned public GitHub release; no publication or cleanup apply.
 #Requires -Version 7.0
-param([Parameter(Mandatory)][string]$Winget, [Parameter(Mandatory)][string]$Candidate)
+param([Parameter(Mandatory)][string]$Winget, [Parameter(Mandatory)][string]$Candidate, [Parameter(Mandatory)][string]$ManifestDir)
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or $env:RUNNER_ARCH -ne 'ARM64') {
@@ -65,44 +65,6 @@ function Resolve-Installed($version, $expectedExeSha) {
     Write-Host "Verified Windows PATH alias, exe digest, reports and registration for $version"
     return $real
 }
-function Export-QAManifest($version, $sha, $url) {
-    $dest = Join-Path $testRoot "manifest-$version"
-    $null = New-Item -ItemType Directory -Path $dest
-    $common = @"
-PackageIdentifier: $packageId
-PackageVersion: $version
-ManifestVersion: 1.6.0
-"@
-    $versionDoc = @'
-DefaultLocale: en-US
-ManifestType: version
-'@
-    $localeDoc = @'
-PackageLocale: en-US
-Publisher: Bhadra Gada
-PackageName: WinMole
-License: GPL-3.0
-ShortDescription: Windows maintenance toolkit
-ManifestType: defaultLocale
-'@
-    $installerDoc = @"
-InstallerType: zip
-NestedInstallerType: portable
-NestedInstallerFiles:
-- RelativeFilePath: winmole.exe
-  PortableCommandAlias: winmole
-Installers:
-- Architecture: arm64
-  InstallerUrl: $url
-  InstallerSha256: $sha
-ManifestType: installer
-"@
-    Set-Content -LiteralPath (Join-Path $dest "$packageId.yaml") -Value "$common`n$versionDoc" -Encoding utf8NoBOM
-    Set-Content -LiteralPath (Join-Path $dest "$packageId.locale.en-US.yaml") -Value "$common`n$localeDoc" -Encoding utf8NoBOM
-    Set-Content -LiteralPath (Join-Path $dest "$packageId.installer.yaml") -Value "$common`n$installerDoc" -Encoding utf8NoBOM
-    Invoke-WinGetChecked validate --manifest $dest | Write-Host
-    return $dest
-}
 function Verify-Archive($version, $source) {
     if ((Get-FileHash -LiteralPath $source).Hash -ne $expected[$version]) { throw "Wrong exact $version installer bytes" }
     $leaf = "winmole-windows-arm64.zip"
@@ -157,11 +119,16 @@ $null = New-Item -ItemType Directory -Path $fixture
 [IO.File]::WriteAllBytes((Join-Path $fixture 'input.bin'), [byte[]](1,2,3,4))
 $new = Verify-Archive '0.1.2' $Candidate
 $releaseUrl = "https://github.com/bhadraagada/winmole/releases/download/v0.1.2/$($new.Leaf)"
+$installedManifest = (Get-Item -LiteralPath $ManifestDir).FullName
+$metadata = Get-Content -LiteralPath (Join-Path $installedManifest "$packageId.installer.yaml") -Raw
+if (-not $metadata.Contains($releaseUrl, [StringComparison]::Ordinal) -or
+    -not $metadata.Contains($expected['0.1.2'], [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Exact manifest does not reference the required release URL and hash'
+}
 $changed = $false
 $storeRemoved = $false
 try {
     Write-Host "Testing official release asset $releaseUrl SHA-256: $($expected['0.1.2'])"
-    $newManifest = Export-QAManifest '0.1.2' $expected['0.1.2'] $releaseUrl
     if (-not $initial.LocalManifestFiles) {
         Invoke-WinGetChecked settings --enable LocalManifestFiles | Write-Host
         $changed = $true
@@ -176,7 +143,7 @@ try {
         $sentinel = Join-Path $config 'whitelist'
         [IO.File]::WriteAllText($sentinel, '# disposable QA preference')
         $sentinelHash = (Get-FileHash -LiteralPath $sentinel).Hash
-        Invoke-WinGetChecked install --manifest $newManifest --scope user --disable-interactivity | Write-Host
+        Invoke-WinGetChecked install --manifest $installedManifest --scope user --disable-interactivity | Write-Host
         $installed = Resolve-Installed '0.1.2' $new.Hash
         if ((Get-FileHash -LiteralPath $sentinel).Hash -ne $sentinelHash) { throw 'Install changed the preference' }
         # Exact public-manifest ID is not usable for this catalog-unpublished
