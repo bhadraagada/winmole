@@ -2,7 +2,9 @@
 # Deep cleanup orchestrator for Windows
 
 #Requires -Version 5.1
+[CmdletBinding(PositionalBinding = $false)]
 param(
+    [Alias('dry-run')]
     [switch]$DryRun,
     [switch]$All,
     [switch]$User,
