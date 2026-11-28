@@ -19,8 +19,8 @@ jobs:
     env:
       WINGET_BUNDLE_SHA256: 65dea9c01ce08ee7b763366b27c0e651f97db857c11ca9b9c301826c10092f2e
       WINGET_DEPENDENCIES_SHA256: ba875afe9d190f61218985ac0292a99d1db710bf93e13c68944ca9d89f0d82d1
-      CANDIDATE_ARM64_SHA256: ec4b66e00cbca86c56e2d56a43a9f8fafede3dc26b2cfee106e24bdaf4ff94ec
-      CANDIDATE_X64_SHA256: 1ec1506dd13a47fb05c55ce4f67bad4ee711320761b18b0f7bbc2c77f1f247ef
+      CANDIDATE_ARM64_SHA256: db94fd089e61453318e5e759cf42faa1c18052b39a96b5038ab6e4e183eb9b94
+      CANDIDATE_X64_SHA256: 03d6de7eb59c1a59c29067abdd7036c5c164dad933de4781ce57e96c2f3bd738
     steps:
       - name: Observe bare runner's Windows PowerShell policy
         shell: cmd
@@ -34,16 +34,9 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: release-binaries
-          run-id: 46133259807
+          run-id: 46134683589
           github-token: ${{ github.token }}
           path: exact-candidate
-
-      - uses: actions/download-artifact@v8
-        with:
-          name: release-binaries
-          run-id: 45727716325
-          github-token: ${{ github.token }}
-          path: exact-previous
 
       - name: Verify exact current ZIP hashes before packaging-only checks
         shell: pwsh
@@ -192,4 +185,4 @@ jobs:
         timeout-minutes: 5
         shell: pwsh
         run: |
-          ./scripts/test-winget-local-lifecycle.ps1 -Winget $env:WINGET_QA_EXE -Previous 'exact-previous/winmole-windows-arm64.zip' -Candidate 'exact-candidate/winmole-windows-arm64.zip'
+          ./scripts/test-winget-local-lifecycle.ps1 -Winget $env:WINGET_QA_EXE -Candidate 'exact-candidate/winmole-windows-arm64.zip'
