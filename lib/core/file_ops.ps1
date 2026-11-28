@@ -17,7 +17,8 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 # Global State
 # ============================================================================
 
-$script:DryRun = $env:WINMOLE_DRY_RUN -eq "1"
+# This name must not shadow the bound -DryRun switch of a dot-sourcing command.
+$script:WinMoleFileOpsDryRun = $env:WINMOLE_DRY_RUN -eq "1"
 $script:TotalSizeCleaned = 0
 $script:FilesCleaned = 0
 $script:TotalItems = 0
@@ -153,7 +154,7 @@ function Remove-SafeItem {
     $sizeHuman = Format-ByteSize -Bytes $size
     
     # Handle dry run
-    if ($script:DryRun) {
+    if ($script:WinMoleFileOpsDryRun) {
         $name = if ($Description) { $Description } else { Split-Path -Leaf $Path }
         Write-DryRun "$name $($script:Colors.Yellow)($sizeHuman dry)$($script:Colors.NC)"
         Set-SectionActivity
@@ -216,7 +217,7 @@ function Remove-SafeItems {
         
         $size = Get-PathSize -Path $path
         
-        if ($script:DryRun) {
+        if ($script:WinMoleFileOpsDryRun) {
             $totalSize += $size
             $removedCount++
             continue
@@ -243,7 +244,7 @@ function Remove-SafeItems {
         $sizeKB = [Math]::Ceiling($totalSize / 1024)
         $sizeHuman = Format-ByteSize -Bytes $totalSize
         
-        if ($script:DryRun) {
+        if ($script:WinMoleFileOpsDryRun) {
             Write-DryRun "$Description $($script:Colors.Yellow)($removedCount items, $sizeHuman dry)$($script:Colors.NC)"
         }
         else {
@@ -336,7 +337,7 @@ function Remove-EmptyDirectories {
         
         foreach ($dir in $emptyDirs) {
             if (Test-SafePath -Path $dir.FullName) {
-                if (-not $script:DryRun) {
+                if (-not $script:WinMoleFileOpsDryRun) {
                     try {
                         Remove-Item -LiteralPath $dir.FullName -Force -ErrorAction Stop
                         $removedCount++
@@ -353,7 +354,7 @@ function Remove-EmptyDirectories {
     }
     
     if ($removedCount -gt 0) {
-        if ($script:DryRun) {
+        if ($script:WinMoleFileOpsDryRun) {
             Write-DryRun "$Description $($script:Colors.Yellow)($removedCount dirs dry)$($script:Colors.NC)"
         }
         else {
@@ -429,7 +430,7 @@ function Set-DryRunMode {
         Enable or disable dry-run mode
     #>
     param([bool]$Enabled)
-    $script:DryRun = $Enabled
+    $script:WinMoleFileOpsDryRun = $Enabled
 }
 
 function Test-DryRunMode {
@@ -437,7 +438,7 @@ function Test-DryRunMode {
     .SYNOPSIS
         Check if dry-run mode is enabled
     #>
-    return $script:DryRun
+    return $script:WinMoleFileOpsDryRun
 }
 
 # ============================================================================
