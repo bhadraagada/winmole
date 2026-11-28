@@ -172,10 +172,10 @@ try {
         $sentinel = Join-Path $config 'whitelist'
         [IO.File]::WriteAllText($sentinel, '# disposable QA preference')
         $sentinelHash = (Get-FileHash -LiteralPath $sentinel).Hash
-        Invoke-WinGetChecked upgrade --manifest $newManifest --scope user --disable-interactivity | Write-Host
+        Invoke-WinGetChecked upgrade --manifest $newManifest --source winget --scope user --disable-interactivity | Write-Host
         $newInstalled = Resolve-Installed '0.1.2' $new.Hash
         if ((Get-FileHash -LiteralPath $sentinel).Hash -ne $sentinelHash) { throw 'Upgrade changed the preference' }
-        Invoke-WinGetChecked uninstall --manifest $newManifest --scope user --disable-interactivity | Write-Host
+        Invoke-WinGetChecked uninstall --manifest $newManifest --source winget --scope user --disable-interactivity | Write-Host
         if (@(InstalledCommands).Count -or @(PortableRegistration).Count -or (Test-Path -LiteralPath $newInstalled) -or (Test-Path -LiteralPath $oldInstalled)) {
             throw 'Uninstall left an alias, installed binary or user-scope registration'
         }
