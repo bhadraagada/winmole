@@ -118,6 +118,22 @@ if (@(InstalledCommands).Count -or @(PortableRegistration).Count) {
 $ps51 = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 $policyBefore = & $ps51 -NoLogo -NoProfile -NonInteractive -Command 'Get-ExecutionPolicy; Get-ExecutionPolicy -List | ConvertTo-Json -Compress'
 $initial = WinGetSettings
+function Source-Snapshot {
+    Invoke-WinGetChecked source export | Where-Object { $_ -match '^\s*\{' } | ForEach-Object {
+        $_ | ConvertFrom-Json -AsHashtable
+    }
+}
+$stock = @{
+    msstore = 'https://storeedgefd.dsx.mp.microsoft.com/v9.0'
+    winget = 'https://cdn.winget.microsoft.com/cache'
+    'winget-font' = 'https://cdn.winget.microsoft.com/fonts'
+}
+$sourceBaseline = @(Source-Snapshot)
+if ('msstore' -notin $sourceBaseline.Name -or 'winget' -notin $sourceBaseline.Name -or
+    @($sourceBaseline | Where-Object { -not $stock.ContainsKey($_.Name) -or $stock[$_.Name] -ne $_.Arg }).Count) {
+    throw 'Refusing to alter a disposable host without the stock WinGet source configuration'
+}
+$sourceFingerprint = $sourceBaseline | Sort-Object Name | ConvertTo-Json -Depth 5 -Compress
 if ($initial.LocalManifestFiles -isnot [bool]) { throw 'Could not determine initial WinGet-only LocalManifestFiles setting' }
 $testRoot = Join-Path $env:RUNNER_TEMP ("WinMole WinGet Lifecycle " + [guid]::NewGuid().ToString('N'))
 $serve = Join-Path $testRoot 'serve only exact ZIPs'
@@ -132,25 +148,45 @@ $null = New-Item -ItemType Directory -Path $serve,$fixture
 $old = Stage-Archive '0.1.1' $Previous
 $new = Stage-Archive '0.1.2' $Candidate
 $httpScript = Join-Path $testRoot 'loopback.py'
+$portPath = Join-Path $testRoot 'port.txt'
+$env:WINGET_QA_PORT_FILE = $portPath
+$env:WINGET_QA_SERVE_DIR = $serve
 @'
+from functools import partial
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
+from os import environ
 from pathlib import Path
 
-with ThreadingHTTPServer(("127.0.0.1", 0), SimpleHTTPRequestHandler) as server:
-    Path("../port.txt").write_text(str(server.server_port), encoding="ascii")
+handler = partial(SimpleHTTPRequestHandler, directory=environ["WINGET_QA_SERVE_DIR"])
+with ThreadingHTTPServer(("127.0.0.1", 0), handler) as server:
+    port = Path(environ["WINGET_QA_PORT_FILE"])
+    temp = port.with_suffix(".tmp")
+    temp.write_text(str(server.server_port), encoding="ascii")
+    temp.replace(port)
     server.serve_forever()
 '@ | Set-Content -LiteralPath $httpScript -Encoding utf8NoBOM
-$python = Get-Command python.exe -All -CommandType Application | Where-Object {
+$pythonPaths = @(Get-Command python.exe -All -CommandType Application | Where-Object {
     $_.Source -notlike '*\WindowsApps\python.exe'
-} | Select-Object -First 1 -ExpandProperty Source
+} | Select-Object -ExpandProperty Source)
+$cacheCandidates = @($pythonPaths | Where-Object { $env:RUNNER_TOOL_CACHE -and $_.StartsWith($env:RUNNER_TOOL_CACHE, [StringComparison]::OrdinalIgnoreCase) })
+$python = @($cacheCandidates + $pythonPaths) | Select-Object -First 1
 if (-not $python) { throw 'No real Python executable available for loopback artifact server' }
-$server = Start-Process $python -WorkingDirectory $serve -ArgumentList ('"' + $httpScript + '"') -PassThru -NoNewWindow
+$pythonVersion = & $python --version 2>&1
+if ($LASTEXITCODE -ne 0 -or ($pythonVersion -join '') -notmatch '^Python 3\.\d+\.\d+$') { throw "Python not usable: $pythonVersion" }
+Write-Host "Loopback interpreter: $pythonVersion ($python)"
+$loopOut = Join-Path $testRoot 'server.stdout'
+$loopErr = Join-Path $testRoot 'server.stderr'
+$server = Start-Process $python -WorkingDirectory $serve -ArgumentList ('"' + $httpScript + '"') -PassThru -NoNewWindow -RedirectStandardOutput $loopOut -RedirectStandardError $loopErr
 $changed = $false
+$storeRemoved = $false
 try {
-    $portPath = Join-Path $testRoot 'port.txt'
-    for ($i = 0; $i -lt 50 -and -not (Test-Path -LiteralPath $portPath); $i++) {
-        if ($server.HasExited) { throw 'Loopback server exited' }
-        Start-Sleep -Milliseconds 100
+    for ($i = 0; $i -lt 120 -and -not (Test-Path -LiteralPath $portPath); $i++) {
+        if ($server.HasExited) { break }
+        Start-Sleep -Milliseconds 250
+    }
+    if (-not (Test-Path -LiteralPath $portPath)) {
+        Get-Content -LiteralPath $loopOut,$loopErr -ErrorAction Continue | Write-Host
+        throw 'No loopback port after bounded 30-second startup'
     }
     $port = Get-Content -LiteralPath $portPath
     if ($port -notmatch '^\d{1,5}$') { throw 'No verified loopback port' }
@@ -172,6 +208,12 @@ try {
         $sentinel = Join-Path $config 'whitelist'
         [IO.File]::WriteAllText($sentinel, '# disposable QA preference')
         $sentinelHash = (Get-FileHash -LiteralPath $sentinel).Hash
+        # WinGet 1.11 scans its configured sources even for local manifest
+        # upgrade/uninstall. --source cannot be combined with --manifest.
+        # Remove only the idle stock Store source to avoid accepting its
+        # terms for an unrelated package, then restore it in finally.
+        Invoke-WinGetChecked source remove --name msstore --disable-interactivity | Write-Host
+        $storeRemoved = $true
         Invoke-WinGetChecked upgrade --manifest $newManifest --scope user --disable-interactivity | Write-Host
         $newInstalled = Resolve-Installed '0.1.2' $new.Hash
         if ((Get-FileHash -LiteralPath $sentinel).Hash -ne $sentinelHash) { throw 'Upgrade changed the preference' }
@@ -188,6 +230,13 @@ try {
 } finally {
     try {
         if ($changed) { Invoke-WinGetChecked settings --disable LocalManifestFiles | Write-Host }
+        if ($storeRemoved) {
+            # A named reset only sees enabled sources on older WinGet.
+            # The initial exact-default-only check makes this bounded.
+            Invoke-WinGetChecked source reset --force --disable-interactivity | Write-Host
+            $restored = Source-Snapshot | Sort-Object Name | ConvertTo-Json -Depth 5 -Compress
+            if ($restored -cne $sourceFingerprint) { throw 'Failed to restore original stock sources' }
+        }
         if ((WinGetSettings).LocalManifestFiles -ne $initial.LocalManifestFiles) { throw 'Failed to restore WinGet local manifest setting' }
         $policyAfter = & $ps51 -NoLogo -NoProfile -NonInteractive -Command 'Get-ExecutionPolicy; Get-ExecutionPolicy -List | ConvertTo-Json -Compress'
         if (($policyAfter -join ' ') -cne ($policyBefore -join ' ')) { throw 'PowerShell execution policy changed' }
