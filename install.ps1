@@ -32,7 +32,7 @@ catch { }
 # Configuration
 # ============================================================================
 
-$script:VERSION = "0.1.1"
+$script:VERSION = "0.1.2"
 $script:SourceDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $script:ShortcutName = "WinMole"
 
