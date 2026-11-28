@@ -1,0 +1,176 @@
+name: Disposable WinGet client probe
+
+on:
+  push:
+    branches:
+      - dot/winget-client-probe
+    paths:
+      - .github/workflows/winget-client-probe.yml
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  arm64-client:
+    runs-on: windows-11-arm
+    timeout-minutes: 12
+    env:
+      WINGET_BUNDLE_SHA256: 65dea9c01ce08ee7b763366b27c0e651f97db857c11ca9b9c301826c10092f2e
+      WINGET_DEPENDENCIES_SHA256: ba875afe9d190f61218985ac0292a99d1db710bf93e13c68944ca9d89f0d82d1
+      CANDIDATE_ARM64_SHA256: 07f3e34d131aad82a1691824131232396b0336836908267b3e7c88045aa44910
+      CANDIDATE_X64_SHA256: 82f628dc563414d75fda0c417d61624f59a72806d7b8847fa50a0fccf7f09390
+    steps:
+      - name: Observe bare runner's Windows PowerShell policy
+        shell: cmd
+        run: |
+          "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -Command "Get-CimInstance Win32_OperatingSystem | Select-Object Caption,Version,ProductType | Format-List; Get-ExecutionPolicy; Get-ExecutionPolicy -List | Format-Table -AutoSize; Write-Output ('Process policy environment set: ' + (Test-Path Env:PSExecutionPolicyPreference))"
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-binaries
+          run-id: 45727716325
+          github-token: ${{ github.token }}
+          path: exact-candidate
+
+      - name: Exercise exact ARM64 ZIP with synthetic read and cleanup preview
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $archive = (Get-Item -LiteralPath 'exact-candidate/winmole-windows-arm64.zip').FullName
+          if ((Get-FileHash -LiteralPath $archive).Hash -ne $env:CANDIDATE_ARM64_SHA256 -or
+              (Get-FileHash -LiteralPath 'exact-candidate/winmole-windows-amd64.zip').Hash -ne $env:CANDIDATE_X64_SHA256) {
+            throw 'Wrong exact ZIP'
+          }
+          $ps51 = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+          $before = & $ps51 -NoLogo -NoProfile -NonInteractive -Command 'Get-ExecutionPolicy; Get-ExecutionPolicy -List | ForEach-Object { "$($_.Scope)=$($_.ExecutionPolicy)" }'
+          $policy = $before[0]
+          $defaultClientPolicy = @($before | Select-Object -Skip 1 | Where-Object { $_ -match '=Undefined$' }).Count -eq 5
+          $PSNativeCommandUseErrorActionPreference = $false
+          Write-Host "Actual product child policy: $($before -join ' ')"
+          $root = Join-Path $env:RUNNER_TEMP ("WinMole QA " + [guid]::NewGuid().ToString('N'))
+          $env:USERPROFILE = Join-Path $root 'profile'
+          $env:LOCALAPPDATA = Join-Path $env:USERPROFILE 'AppData\Local'
+          $env:APPDATA = Join-Path $env:USERPROFILE 'AppData\Roaming'
+          $env:TEMP = $env:TMP = Join-Path $root 'temp'
+          $fixture = Join-Path $env:LOCALAPPDATA 'D3DSCache'
+          $null = New-Item -ItemType Directory -Path $fixture,$env:APPDATA,$env:TEMP
+          $file = Join-Path $fixture 'sentinel.bin'
+          [IO.File]::WriteAllBytes($file, [byte[]](1, 2, 3, 4))
+          $digest = (Get-FileHash -LiteralPath $file).Hash
+          $app = Join-Path $root 'app'
+          Expand-Archive -LiteralPath $archive -DestinationPath $app
+          $exe = Join-Path $app 'winmole.exe'
+          $version = & $exe --version
+          if ($LASTEXITCODE -ne 0 -or ($version -join '') -notmatch '^WinMole v\d+\.\d+\.\d+$') { throw 'Native version failed' }
+          $report = & $exe analyze $fixture --json | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $report.partial -ne $false -or $report.total_bytes -ne 4 -or
+              $report.entries.Count -ne 1 -or $report.entries[0].name -cne 'sentinel.bin') {
+            throw 'Analyzer did not report the synthetic fixture'
+          }
+          $output = & $exe clean -DryRun -GPUShaders 2>&1
+          $cleanupExit = $LASTEXITCODE
+          $after = & $ps51 -NoLogo -NoProfile -NonInteractive -Command 'Get-ExecutionPolicy; Get-ExecutionPolicy -List | ForEach-Object { "$($_.Scope)=$($_.ExecutionPolicy)" }'
+          if ($digest -ne (Get-FileHash -LiteralPath $file).Hash -or ($after -join ' ') -ne ($before -join ' ')) {
+            throw 'Dry-run modified fixture or PowerShell policy'
+          }
+          $text = $output | Out-String
+          Write-Host "Exact archive and native report verified; unchanged policy and fixture. Cleanup exit: $cleanupExit"
+          Write-Host $text
+          if ($cleanupExit -ne 0 -and $policy -eq 'Restricted' -and
+              $text -match 'running scripts is disabled|PSSecurityException|UnauthorizedAccess') {
+            Write-Host "OBSERVED: Restricted script block (all scopes undefined: $defaultClientPolicy, not maintenance support)"
+          } elseif ($cleanupExit -eq 0 -and $text -match 'DRY RUN MODE' -and $text -match 'DirectX shader cache') {
+            Write-Host "OBSERVED: substantive DirectX preview under $policy (not proof under Restricted)"
+          } else {
+            throw 'Cleanup did not produce the expected fixture preview or a classified policy failure'
+          }
+
+      - name: Observe or bootstrap signed stable Microsoft WinGet
+        if: ${{ always() }}
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
+          $root = Join-Path $env:RUNNER_TEMP 'signed-app-installer'
+          if ($null -eq $winget) {
+            $null = New-Item -ItemType Directory -Path $root
+            $base = 'https://github.com/microsoft/winget-cli/releases/download/v1.29.380'
+            $bundleName = 'Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle'
+            $depName = 'DesktopAppInstaller_Dependencies.zip'
+            $bundle = Join-Path $root $bundleName
+            $deps = Join-Path $root $depName
+            Invoke-WebRequest -UseBasicParsing -Uri "$base/$bundleName" -OutFile $bundle
+            Invoke-WebRequest -UseBasicParsing -Uri "$base/$depName" -OutFile $deps
+            if ((Get-FileHash -LiteralPath $bundle).Hash -ne $env:WINGET_BUNDLE_SHA256 -or
+                (Get-FileHash -LiteralPath $deps).Hash -ne $env:WINGET_DEPENDENCIES_SHA256) {
+              throw 'Unexpected Microsoft App Installer release bytes'
+            }
+            $expanded = Join-Path $root 'dependencies'
+            Expand-Archive -LiteralPath $deps -DestinationPath $expanded
+            $depPaths = @(Get-ChildItem -Path (Join-Path $expanded 'arm64\*.appx') -File | Select-Object -ExpandProperty FullName)
+            if ($depPaths.Count -ne 3) { throw 'Unexpected ARM64 dependencies' }
+            # Default platform trust; no imported certificates/policy changes.
+            Add-AppxPackage -Path $bundle -DependencyPath $depPaths -ErrorAction Stop
+            $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
+          }
+          if ($null -ne $winget) {
+            $exe = $winget.Source
+          } else {
+            $package = Get-AppxPackage -Name Microsoft.DesktopAppInstaller
+            if ($null -eq $package) { throw 'App Installer not registered in disposable runner account' }
+            $exe = Join-Path $package.InstallLocation 'winget.exe'
+          }
+          $version = & $exe --version
+          Write-Host "WinGet version: $version"
+          if ($LASTEXITCODE -ne 0 -or $version -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') { throw 'Stable WinGet could not run' }
+          & $exe settings export
+          if ($LASTEXITCODE -ne 0) { throw 'WinGet admin-settings observation failed' }
+          "WINGET_QA_EXE=$exe" | Out-File -LiteralPath $env:GITHUB_ENV -Encoding UTF8 -Append
+
+      - name: Run real WinGet validation against hash-exact QA metadata (no install)
+        if: ${{ always() && env.WINGET_QA_EXE != '' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $m = Join-Path $env:RUNNER_TEMP 'winmole-qa-manifests'
+          $null = New-Item -ItemType Directory -Path $m
+          $common = @'
+          PackageIdentifier: BhadraGada.WinMole
+          PackageVersion: 0.1.1
+          ManifestVersion: 1.6.0
+          '@
+          $version = @'
+          DefaultLocale: en-US
+          ManifestType: version
+          '@
+          $locale = @'
+          PackageLocale: en-US
+          Publisher: Bhadra Gada
+          PackageName: WinMole
+          License: MIT
+          ShortDescription: Windows maintenance toolkit
+          ManifestType: defaultLocale
+          '@
+          $installer = @"
+          InstallerType: zip
+          NestedInstallerType: portable
+          NestedInstallerFiles:
+          - RelativeFilePath: winmole.exe
+            PortableCommandAlias: winmole
+          Scope: user
+          Installers:
+          - Architecture: x64
+            InstallerUrl: https://example.invalid/winmole-windows-amd64.zip
+            InstallerSha256: $env:CANDIDATE_X64_SHA256
+          - Architecture: arm64
+            InstallerUrl: https://example.invalid/winmole-windows-arm64.zip
+            InstallerSha256: $env:CANDIDATE_ARM64_SHA256
+          ManifestType: installer
+          "@
+          Set-Content -LiteralPath (Join-Path $m 'BhadraGada.WinMole.yaml') -Value "$common`n$version" -Encoding utf8NoBOM
+          Set-Content -LiteralPath (Join-Path $m 'BhadraGada.WinMole.installer.yaml') -Value "$common`n$installer" -Encoding utf8NoBOM
+          Set-Content -LiteralPath (Join-Path $m 'BhadraGada.WinMole.locale.en-US.yaml') -Value "$common`n$locale" -Encoding utf8NoBOM
+          & $env:WINGET_QA_EXE validate --manifest $m
+          if ($LASTEXITCODE -ne 0) { throw 'WinGet validate failed' }
+          Write-Host 'Validation only: URLs are intentionally unpublished; no LocalManifestFiles or trust changes.'
