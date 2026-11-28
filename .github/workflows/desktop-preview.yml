@@ -1,0 +1,89 @@
+name: Desktop preview
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/desktop-preview.yml'
+      - 'cmd/analyze/**'
+      - 'cmd/status/**'
+      - 'cmd/winmole-ui/**'
+      - 'go.mod'
+      - 'go.sum'
+
+permissions:
+  contents: read
+
+jobs:
+  native-desktop-preview:
+    name: Native desktop preview (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            arch: amd64
+          - runner: windows-11-arm
+            arch: arm64
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build native preview and report helpers
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $nativeArch = go env GOARCH
+          if ($LASTEXITCODE -ne 0 -or $nativeArch -cne '${{ matrix.arch }}') {
+              throw "Expected native architecture ${{ matrix.arch }}, saw $nativeArch"
+          }
+          $package = Join-Path $env:RUNNER_TEMP 'WinMole Desktop fixture'
+          New-Item -ItemType Directory -Path (Join-Path $package 'bin') -ErrorAction Stop | Out-Null
+          go build -o (Join-Path $package 'bin/analyze.exe') ./cmd/analyze
+          if ($LASTEXITCODE) { throw 'Native analyzer build failed' }
+          go build -o (Join-Path $package 'bin/status.exe') ./cmd/status
+          if ($LASTEXITCODE) { throw 'Native status build failed' }
+          go build -ldflags '-H=windowsgui' -o (Join-Path $package 'WinMoleDesktop.exe') ./cmd/winmole-ui
+          if ($LASTEXITCODE) { throw 'Native GUI build failed' }
+          "WINMOLE_UI_HELPER_FIXTURE=$package" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Test native read-only helpers with a disposable folder
+        run: |
+          go test -count=1 -v ./cmd/winmole-ui
+          if ($LASTEXITCODE) { throw 'Desktop helper tests failed' }
+      - name: Check that desktop preview publishes a Windows window
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $app = Join-Path $env:WINMOLE_UI_HELPER_FIXTURE 'WinMoleDesktop.exe'
+          $process = Start-Process -FilePath $app -PassThru
+          try {
+              $deadline = [DateTime]::UtcNow.AddSeconds(20)
+              do {
+                  $process.Refresh()
+                  if ($process.HasExited) {
+                      throw "Desktop preview exited before opening a window, code $($process.ExitCode)"
+                  }
+                  if ($process.MainWindowHandle -ne [IntPtr]::Zero -and $process.MainWindowTitle -ceq 'WinMole') {
+                      Write-Host 'Observed WinMole desktop window'
+                      break
+                  }
+                  Start-Sleep -Milliseconds 250
+              } while ([DateTime]::UtcNow -lt $deadline)
+              if ($process.MainWindowHandle -eq [IntPtr]::Zero -or $process.MainWindowTitle -cne 'WinMole') {
+                  throw 'Timed out waiting for a WinMole desktop window'
+              }
+          } finally {
+              if (-not $process.HasExited) {
+                  $null = $process.CloseMainWindow()
+                  if (-not $process.WaitForExit(3000)) {
+                      # Only stop the preview process started above, never other WinMole instances.
+                      $process.Kill($true)
+                  }
+              }
+              $process.Dispose()
+          }
