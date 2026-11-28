@@ -84,6 +84,7 @@ jobs:
             # Default trust; cap per-user MSIX registration separately.
             $env:WINGET_PROBE_BUNDLE = $bundle
             $env:WINGET_PROBE_DEPS = Join-Path $expanded 'arm64'
+            $env:WINGET_PROBE_REGISTERED = Join-Path $root 'registered-ok.txt'
             $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
             $worker = Join-Path $root 'register.ps1'
             @'
@@ -105,6 +106,7 @@ jobs:
               if ($missing.Count -gt 0) { $appx.DependencyPath = $missing }
               Write-Output "$($missing.Count) separately supplied dependencies"
               Add-AppxPackage @appx
+              [IO.File]::WriteAllText($env:WINGET_PROBE_REGISTERED, 'registered')
           } catch {
               [Console]::Error.WriteLine($_.ToString())
               exit 1
@@ -119,7 +121,9 @@ jobs:
               throw 'MSIX registration exceeded 90 seconds on disposable Windows client'
             }
             Get-Content -LiteralPath $regOut,$regErr
-            if ($proc.ExitCode -ne 0) { throw "MSIX registration failed with exit $($proc.ExitCode)" }
+            if ((Get-Content -LiteralPath $env:WINGET_PROBE_REGISTERED -ErrorAction SilentlyContinue) -ne 'registered') {
+              throw 'MSIX child did not confirm successful registration'
+            }
             $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
           }
           if ($null -ne $winget) {
