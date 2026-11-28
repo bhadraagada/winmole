@@ -1,0 +1,192 @@
+name: Disposable WinGet x64 server probe
+
+on:
+  push:
+    branches:
+      - dot/winget-server-probe
+    paths:
+      - .github/workflows/winget-server-probe.yml
+      - scripts/test-winget-local-lifecycle.ps1
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  x64-server:
+    runs-on: windows-2025
+    timeout-minutes: 15
+    env:
+      WINGET_BUNDLE_SHA256: 65dea9c01ce08ee7b763366b27c0e651f97db857c11ca9b9c301826c10092f2e
+      WINGET_DEPENDENCIES_SHA256: ba875afe9d190f61218985ac0292a99d1db710bf93e13c68944ca9d89f0d82d1
+      CANDIDATE_ARM64_SHA256: ec4b66e00cbca86c56e2d56a43a9f8fafede3dc26b2cfee106e24bdaf4ff94ec
+      CANDIDATE_X64_SHA256: 1ec1506dd13a47fb05c55ce4f67bad4ee711320761b18b0f7bbc2c77f1f247ef
+    steps:
+      - name: Observe bare runner's Windows PowerShell policy
+        shell: cmd
+        run: |
+          "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -Command "Get-CimInstance Win32_OperatingSystem | Select-Object Caption,Version,ProductType | Format-List; Get-ExecutionPolicy; Get-ExecutionPolicy -List | Format-Table -AutoSize; Write-Output ('Process policy environment set: ' + (Test-Path Env:PSExecutionPolicyPreference))"
+
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-binaries
+          run-id: 46133259807
+          github-token: ${{ github.token }}
+          path: exact-candidate
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-binaries
+          run-id: 45727716325
+          github-token: ${{ github.token }}
+          path: exact-previous
+
+      - name: Verify exact current ZIP hashes before packaging-only checks
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ((Get-FileHash -LiteralPath 'exact-candidate/winmole-windows-amd64.zip').Hash -ne $env:CANDIDATE_X64_SHA256 -or
+              (Get-FileHash -LiteralPath 'exact-candidate/winmole-windows-arm64.zip').Hash -ne $env:CANDIDATE_ARM64_SHA256) {
+            throw 'Wrong exact ZIP'
+          }
+          Write-Host 'Both staged ZIP hashes match. Testing install lifecycle and native reports only, not script-backed cleanup.'
+
+      - name: Observe or bootstrap signed stable Microsoft WinGet
+        if: ${{ always() }}
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
+          $root = Join-Path $env:RUNNER_TEMP 'signed-app-installer'
+          if ($null -eq $winget) {
+            $null = New-Item -ItemType Directory -Path $root
+            $base = 'https://github.com/microsoft/winget-cli/releases/download/v1.29.380'
+            $bundleName = 'Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle'
+            $depName = 'DesktopAppInstaller_Dependencies.zip'
+            $bundle = Join-Path $root $bundleName
+            $deps = Join-Path $root $depName
+            & curl.exe --fail --location --silent --show-error --max-time 120 --output $bundle "$base/$bundleName"
+            if ($LASTEXITCODE -ne 0) { throw 'Could not obtain signed stable Microsoft bundle' }
+            & curl.exe --fail --location --silent --show-error --max-time 120 --output $deps "$base/$depName"
+            if ($LASTEXITCODE -ne 0) { throw 'Could not obtain stable Microsoft bundle dependencies' }
+            if ((Get-FileHash -LiteralPath $bundle).Hash -ne $env:WINGET_BUNDLE_SHA256 -or
+                (Get-FileHash -LiteralPath $deps).Hash -ne $env:WINGET_DEPENDENCIES_SHA256) {
+              throw 'Unexpected Microsoft App Installer release bytes'
+            }
+            $expanded = Join-Path $root 'dependencies'
+            Expand-Archive -LiteralPath $deps -DestinationPath $expanded
+            $depPaths = @(Get-ChildItem -Path (Join-Path $expanded 'x64\*.appx') -File | Select-Object -ExpandProperty FullName)
+            if ($depPaths.Count -ne 3) { throw 'Unexpected x64 dependencies' }
+            # Default trust; cap per-user MSIX registration separately.
+            $env:WINGET_PROBE_BUNDLE = $bundle
+            $env:WINGET_PROBE_DEPS = Join-Path $expanded 'x64'
+            $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+            $worker = Join-Path $root 'register.ps1'
+            @'
+          $ErrorActionPreference = 'Stop'
+          try {
+              $dependencies = Get-ChildItem -Path (Join-Path $env:WINGET_PROBE_DEPS '*.appx') -File
+              $missing = @(
+                  foreach ($dep in $dependencies) {
+                      if ($dep.Name -notmatch '^(.+)_([0-9.]+)_x64\.appx$') { throw 'Unexpected Microsoft dependency filename' }
+                      $name = $Matches[1]
+                      $minimum = [version]$Matches[2]
+                      $present = @(Get-AppxPackage -Name $name | Where-Object {
+                          $_.Architecture -in @('X64','Neutral') -and [version]$_.Version -ge $minimum
+                      }).Count -gt 0
+                      if (-not $present) { $dep.FullName }
+                  }
+              )
+              $appx = @{ Path = $env:WINGET_PROBE_BUNDLE; ErrorAction = 'Stop' }
+              if ($missing.Count -gt 0) { $appx.DependencyPath = $missing }
+              Write-Output "$($missing.Count) separately supplied dependencies"
+              Add-AppxPackage @appx
+          } catch {
+              [Console]::Error.WriteLine($_.ToString())
+              exit 1
+          }
+          '@ | Set-Content -LiteralPath $worker -Encoding UTF8
+            $regOut = Join-Path $root 'register.stdout'
+            $regErr = Join-Path $root 'register.stderr'
+            $proc = Start-Process $ps -ArgumentList ('-NoLogo -NoProfile -NonInteractive -File "' + $worker + '"') -PassThru -NoNewWindow -RedirectStandardOutput $regOut -RedirectStandardError $regErr
+            if (-not $proc.WaitForExit(90000)) {
+              if (-not $proc.HasExited) { Stop-Process -Id $proc.Id }
+              Get-Content -LiteralPath $regOut,$regErr
+              throw 'MSIX registration exceeded 90 seconds on disposable Windows Server'
+            }
+            Get-Content -LiteralPath $regOut,$regErr
+            if ($proc.ExitCode -ne 0) { throw "MSIX registration failed with exit $($proc.ExitCode)" }
+            $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
+          }
+          if ($null -ne $winget) {
+            $exe = $winget.Source
+          } else {
+            $package = Get-AppxPackage -Name Microsoft.DesktopAppInstaller
+            if ($null -eq $package) { throw 'App Installer not registered in disposable runner account' }
+            $exe = Join-Path $package.InstallLocation 'winget.exe'
+          }
+          $version = & $exe --version
+          Write-Host "WinGet version: $version"
+          if ($LASTEXITCODE -ne 0 -or $version -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') { throw 'Stable WinGet could not run' }
+          & $exe settings export
+          if ($LASTEXITCODE -ne 0) { throw 'WinGet admin-settings observation failed' }
+          "WINGET_QA_EXE=$exe" | Out-File -LiteralPath $env:GITHUB_ENV -Encoding UTF8 -Append
+
+      - name: Run real WinGet validation against hash-exact QA metadata (no install)
+        if: ${{ always() && env.WINGET_QA_EXE != '' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $m = Join-Path $env:RUNNER_TEMP 'winmole-qa-manifests'
+          $null = New-Item -ItemType Directory -Path $m
+          $common = @'
+          PackageIdentifier: BhadraGada.WinMole
+          PackageVersion: 0.1.2
+          ManifestVersion: 1.6.0
+          '@
+          $version = @'
+          DefaultLocale: en-US
+          ManifestType: version
+          '@
+          $locale = @'
+          PackageLocale: en-US
+          Publisher: Bhadra Gada
+          PackageName: WinMole
+          License: GPL-3.0
+          ShortDescription: Windows maintenance toolkit
+          ManifestType: defaultLocale
+          '@
+          $installer = @"
+          InstallerType: zip
+          NestedInstallerType: portable
+          NestedInstallerFiles:
+          - RelativeFilePath: winmole.exe
+            PortableCommandAlias: winmole
+          Scope: user
+          Installers:
+          - Architecture: x64
+            InstallerUrl: https://example.invalid/winmole-windows-amd64.zip
+            InstallerSha256: $env:CANDIDATE_X64_SHA256
+          - Architecture: arm64
+            InstallerUrl: https://example.invalid/winmole-windows-arm64.zip
+            InstallerSha256: $env:CANDIDATE_ARM64_SHA256
+          ManifestType: installer
+          "@
+          Set-Content -LiteralPath (Join-Path $m 'BhadraGada.WinMole.yaml') -Value "$common`n$version" -Encoding utf8NoBOM
+          Set-Content -LiteralPath (Join-Path $m 'BhadraGada.WinMole.installer.yaml') -Value "$common`n$installer" -Encoding utf8NoBOM
+          Set-Content -LiteralPath (Join-Path $m 'BhadraGada.WinMole.locale.en-US.yaml') -Value "$common`n$locale" -Encoding utf8NoBOM
+          & $env:WINGET_QA_EXE validate --manifest $m
+          if ($LASTEXITCODE -ne 0) { throw 'WinGet validate failed' }
+          Write-Host 'Validation only: URLs are intentionally unpublished; no LocalManifestFiles or trust changes.'
+
+
+      - name: Exercise actual WinGet user-scope portable lifecycle on exact staged artifacts
+        if: ${{ always() && env.WINGET_QA_EXE != '' }}
+        timeout-minutes: 5
+        shell: pwsh
+        run: |
+          ./scripts/test-winget-local-lifecycle.ps1 -Winget $env:WINGET_QA_EXE -Previous 'exact-previous/winmole-windows-amd64.zip' -Candidate 'exact-candidate/winmole-windows-amd64.zip'

@@ -3,12 +3,12 @@
 param([Parameter(Mandatory)][string]$Winget, [Parameter(Mandatory)][string]$Previous, [Parameter(Mandatory)][string]$Candidate)
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
-if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or $env:RUNNER_ARCH -ne 'ARM64') {
-    throw 'This probe only runs on the intended disposable GitHub ARM64 runner.'
+if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or $env:RUNNER_ARCH -ne 'X64') {
+    throw 'This probe only runs on the intended disposable GitHub x64 runner.'
 }
 $expected = @{
-    '0.1.1' = '07f3e34d131aad82a1691824131232396b0336836908267b3e7c88045aa44910'
-    '0.1.2' = 'ec4b66e00cbca86c56e2d56a43a9f8fafede3dc26b2cfee106e24bdaf4ff94ec'
+    '0.1.1' = '82f628dc563414d75fda0c417d61624f59a72806d7b8847fa50a0fccf7f09390'
+    '0.1.2' = '1ec1506dd13a47fb05c55ce4f67bad4ee711320761b18b0f7bbc2c77f1f247ef'
 }
 $packageId = 'BhadraGada.WinMole'
 function Invoke-WinGetChecked {
@@ -45,6 +45,8 @@ function Resolve-Installed($version, $expectedExeSha) {
         throw 'PATH resolves outside the intended per-user WinGet install root'
     }
     if ((Get-FileHash -LiteralPath $real).Hash -ne $expectedExeSha) { throw 'Installed user command does not match the ZIP launcher bytes' }
+    $zone = Get-Content -LiteralPath $real -Stream Zone.Identifier -ErrorAction SilentlyContinue | Where-Object { $_ -match '^ZoneId=\d+$' }
+    Write-Host "Loopback-installed executable ZoneIdentifier: $(if ($zone) { $zone } else { 'absent' })"
     $observedVersion = & $alias --version
     if ($LASTEXITCODE -ne 0 -or $observedVersion -cne "WinMole v$version") { throw "Wrong installed version: $observedVersion" }
     $report = & $alias analyze . --json | ConvertFrom-Json
@@ -74,7 +76,7 @@ ManifestType: version
 PackageLocale: en-US
 Publisher: Bhadra Gada
 PackageName: WinMole
-License: MIT
+License: GPL-3.0
 ShortDescription: Windows maintenance toolkit
 ManifestType: defaultLocale
 '@
@@ -86,7 +88,7 @@ NestedInstallerFiles:
   PortableCommandAlias: winmole
 Scope: user
 Installers:
-- Architecture: arm64
+- Architecture: x64
   InstallerUrl: $url
   InstallerSha256: $sha
 ManifestType: installer
@@ -99,7 +101,7 @@ ManifestType: installer
 }
 function Stage-Archive($version, $source) {
     if ((Get-FileHash -LiteralPath $source).Hash -ne $expected[$version]) { throw "Wrong exact $version installer bytes" }
-    $leaf = "winmole-$version-windows-arm64.zip"
+    $leaf = "winmole-$version-windows-amd64.zip"
     Copy-Item -LiteralPath $source -Destination (Join-Path $serve $leaf)
     $zip = [IO.Compression.ZipFile]::OpenRead((Join-Path $serve $leaf))
     try {
