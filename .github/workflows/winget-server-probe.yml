@@ -7,6 +7,7 @@ on:
     paths:
       - .github/workflows/winget-server-probe.yml
       - scripts/test-winget-local-lifecycle.ps1
+      - .github/qa/winget-release/**
 
 permissions:
   actions: read
@@ -131,56 +132,18 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'WinGet admin-settings observation failed' }
           "WINGET_QA_EXE=$exe" | Out-File -LiteralPath $env:GITHUB_ENV -Encoding UTF8 -Append
 
-      - name: Run real WinGet validation against manifest against versioned public release URLs
+      - name: Run real WinGet validation against exact proposed manifests
         if: ${{ always() && env.WINGET_QA_EXE != '' }}
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $m = Join-Path $env:RUNNER_TEMP 'winmole-qa-manifests'
-          $null = New-Item -ItemType Directory -Path $m
-          $common = @'
-          PackageIdentifier: BhadraGada.WinMole
-          PackageVersion: 0.1.2
-          ManifestVersion: 1.6.0
-          '@
-          $version = @'
-          DefaultLocale: en-US
-          ManifestType: version
-          '@
-          $locale = @'
-          PackageLocale: en-US
-          Publisher: Bhadra Gada
-          PackageName: WinMole
-          License: GPL-3.0
-          ShortDescription: Windows maintenance toolkit
-          ManifestType: defaultLocale
-          '@
-          $installer = @"
-          InstallerType: zip
-          NestedInstallerType: portable
-          NestedInstallerFiles:
-          - RelativeFilePath: winmole.exe
-            PortableCommandAlias: winmole
-          Installers:
-          - Architecture: x64
-            InstallerUrl: https://github.com/bhadraagada/winmole/releases/download/v0.1.2/winmole-windows-amd64.zip
-            InstallerSha256: $env:CANDIDATE_X64_SHA256
-          - Architecture: arm64
-            InstallerUrl: https://github.com/bhadraagada/winmole/releases/download/v0.1.2/winmole-windows-arm64.zip
-            InstallerSha256: $env:CANDIDATE_ARM64_SHA256
-          ManifestType: installer
-          "@
-          Set-Content -LiteralPath (Join-Path $m 'BhadraGada.WinMole.yaml') -Value "$common`n$version" -Encoding utf8NoBOM
-          Set-Content -LiteralPath (Join-Path $m 'BhadraGada.WinMole.installer.yaml') -Value "$common`n$installer" -Encoding utf8NoBOM
-          Set-Content -LiteralPath (Join-Path $m 'BhadraGada.WinMole.locale.en-US.yaml') -Value "$common`n$locale" -Encoding utf8NoBOM
-          & $env:WINGET_QA_EXE validate --manifest $m
-          if ($LASTEXITCODE -ne 0) { throw 'WinGet validate failed' }
-          Write-Host 'Manifest validation succeeded for official versioned GitHub release URLs.'
-
+          & $env:WINGET_QA_EXE validate --manifest '.github/qa/winget-release'
+          if ($LASTEXITCODE -ne 0) { throw 'WinGet validation rejected the exact proposed manifests' }
+          Write-Host 'Exact proposed WinGet manifests validated with official versioned GitHub release URLs.'
 
       - name: Exercise actual WinGet user-scope portable lifecycle on exact published release artifacts
         if: ${{ always() && env.WINGET_QA_EXE != '' }}
         timeout-minutes: 5
         shell: pwsh
         run: |
-          ./scripts/test-winget-local-lifecycle.ps1 -Winget $env:WINGET_QA_EXE -Candidate 'exact-candidate/winmole-windows-amd64.zip'
+          ./scripts/test-winget-local-lifecycle.ps1 -Winget $env:WINGET_QA_EXE -Candidate 'exact-candidate/winmole-windows-amd64.zip' -ManifestDir '.github/qa/winget-release'
