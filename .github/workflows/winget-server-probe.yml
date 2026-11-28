@@ -56,9 +56,16 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
+          $winget = Get-Command winget.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+          $supportsManifest = $false
+          if ($winget) {
+            $installedVersion = & $winget.Source --version
+            $supportsManifest = $LASTEXITCODE -eq 0 -and $installedVersion -match '^v(\d+\.\d+\.\d+)$' -and
+              [version]$Matches[1] -ge [version]'1.29.380'
+            Write-Host "Preinstalled WinGet: $installedVersion; sufficient for final schema probe: $supportsManifest"
+          }
           $root = Join-Path $env:RUNNER_TEMP 'signed-app-installer'
-          if ($null -eq $winget) {
+          if (-not $supportsManifest) {
             $null = New-Item -ItemType Directory -Path $root
             $base = 'https://github.com/microsoft/winget-cli/releases/download/v1.29.380'
             $bundleName = 'Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle'
@@ -80,6 +87,7 @@ jobs:
             # Default trust; cap per-user MSIX registration separately.
             $env:WINGET_PROBE_BUNDLE = $bundle
             $env:WINGET_PROBE_DEPS = Join-Path $expanded 'x64'
+            $env:WINGET_PROBE_REGISTERED = Join-Path $root 'registered-ok.txt'
             $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
             $worker = Join-Path $root 'register.ps1'
             @'
@@ -101,6 +109,7 @@ jobs:
               if ($missing.Count -gt 0) { $appx.DependencyPath = $missing }
               Write-Output "$($missing.Count) separately supplied dependencies"
               Add-AppxPackage @appx
+              [IO.File]::WriteAllText($env:WINGET_PROBE_REGISTERED, 'registered')
           } catch {
               [Console]::Error.WriteLine($_.ToString())
               exit 1
@@ -115,8 +124,10 @@ jobs:
               throw 'MSIX registration exceeded 90 seconds on disposable Windows Server'
             }
             Get-Content -LiteralPath $regOut,$regErr
-            if ($proc.ExitCode -ne 0) { throw "MSIX registration failed with exit $($proc.ExitCode)" }
-            $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
+            if ((Get-Content -LiteralPath $env:WINGET_PROBE_REGISTERED -ErrorAction SilentlyContinue) -ne 'registered') {
+              throw 'MSIX child did not confirm successful registration'
+            }
+            $winget = Get-Command winget.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
           }
           if ($null -ne $winget) {
             $exe = $winget.Source
@@ -127,7 +138,8 @@ jobs:
           }
           $version = & $exe --version
           Write-Host "WinGet version: $version"
-          if ($LASTEXITCODE -ne 0 -or $version -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') { throw 'Stable WinGet could not run' }
+          if ($LASTEXITCODE -ne 0 -or $version -notmatch '^v(\d+\.\d+\.\d+)$' -or
+              [version]$Matches[1] -lt [version]'1.29.380') { throw 'Modern stable WinGet could not run' }
           & $exe settings export
           if ($LASTEXITCODE -ne 0) { throw 'WinGet admin-settings observation failed' }
           "WINGET_QA_EXE=$exe" | Out-File -LiteralPath $env:GITHUB_ENV -Encoding UTF8 -Append
